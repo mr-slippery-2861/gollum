@@ -16,7 +16,7 @@
       (let ((mods (mapcar (lambda (codes) (mapcar #'mod-keycode->mod codes))
 			  (list shift-keycodes lock-keycodes control-keycodes mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes)))
 	    map)
-	(dolist (key '((:alt "Alt_L" "Alt_R") (:meta "Meta_L" "Meta_R") (:super "Super_L" "Super_R") (:hyper "Hyper_L" "Hyper_R")))
+	(dolist (key '((:alt "Alt_L" "Alt_R") (:meta "Meta_L" "Meta_R") (:super "Super_L" "Super_R") (:hyper "Hyper_L" "Hyper_R") (:num-lock "Num_Lock")))
 	  (cond
 	    ((names-in-mod-p (cdr key) (first mods)) (push (list (car key) nil) map))
 	    ((names-in-mod-p (cdr key) (second mods)) (push (list (car key) nil) map))
@@ -26,9 +26,11 @@
 	    ((names-in-mod-p (cdr key) (sixth mods)) (push (list (car key) :mod-3) map))
 	    ((names-in-mod-p (cdr key) (seventh mods)) (push (list (car key) :mod-4) map))
 	    ((names-in-mod-p (cdr key) (eighth mods)) (push (list (car key) :mod-5) map))))
-	map))))
+	(values map mods)))))
 
-(defvar *key-mod-map* (make-key-mod-map))
+(multiple-value-bind (map mods) (make-key-mod-map)
+  (defvar *key-mod-map* map)
+  (defvar *mod-key-map* mods))
 
 (defun abbr->mod (abbr)
   "ABBR may be S(shift),A(alt),C(control),s(super),H(hyper),M(meta)"
