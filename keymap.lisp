@@ -5,7 +5,6 @@
 
 (defun make-key-mod-map ()
   (multiple-value-bind (shift-keycodes lock-keycodes control-keycodes mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes) (xlib:modifier-mapping *display*)
-    (declare (ignore shift-keycodes lock-keycodes control-keycodes))
     (labels ((mod-keycode->mod (keycode)
 	       (let ((keysym (xlib:keycode->keysym *display* keycode 0)))
 		 (when (zerop keysym)
@@ -15,21 +14,33 @@
 	       (loop for name in names
 		    thereis (find name mod :test #'string=))))
       (let ((mods (mapcar (lambda (codes) (mapcar #'mod-keycode->mod codes))
-			  (list mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes)))
+			  (list shift-keycodes lock-keycodes control-keycodes mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes)))
 	    map)
 	(dolist (key '((:alt "Alt_L" "Alt_R") (:meta "Meta_L" "Meta_R") (:super "Super_L" "Super_R") (:hyper "Hyper_L" "Hyper_R")))
 	  (cond
-	    ((names-in-mod-p (cdr key) (first mods)) (push (list (car key) :mod-1) map))
-	    ((names-in-mod-p (cdr key) (second mods)) (push (list (car key) :mod-2) map))
-	    ((names-in-mod-p (cdr key) (third mods)) (push (list (car key) :mod-3) map))
-	    ((names-in-mod-p (cdr key) (fourth mods)) (push (list (car key) :mod-4) map))
-	    ((names-in-mod-p (cdr key) (fifth mods)) (push (list (car key) :mod-5) map))))
+	    ((names-in-mod-p (cdr key) (first mods)) (push (list (car key) nil) map))
+	    ((names-in-mod-p (cdr key) (second mods)) (push (list (car key) nil) map))
+	    ((names-in-mod-p (cdr key) (third mods)) (push (list (car key) nil) map))
+	    ((names-in-mod-p (cdr key) (fourth mods)) (push (list (car key) :mod-1) map))
+	    ((names-in-mod-p (cdr key) (fifth mods)) (push (list (car key) :mod-2) map))
+	    ((names-in-mod-p (cdr key) (sixth mods)) (push (list (car key) :mod-3) map))
+	    ((names-in-mod-p (cdr key) (seventh mods)) (push (list (car key) :mod-4) map))
+	    ((names-in-mod-p (cdr key) (eighth mods)) (push (list (car key) :mod-5) map))))
 	map))))
-	       
+
+(defvar *key-mod-map* (make-key-mod-map))
+
 (defun abbr->mod (abbr)
   "ABBR may be S(shift),A(alt),C(control),s(super),H(hyper),M(meta)"
-  (case abbr
-    (#\S :shift)))
+  (labels ((key->mod (key)
+	     (cadr (assoc key *key-mod-map*))))
+    (case abbr
+      (#\S :shift)
+      (#\A (key->mod :alt))
+      (#\C :control)
+      (#\s (key->mod :super))
+      (#\H (key->mod :hyper))
+      (#\M (key->mod :meta)))))
 
 (defun kbd (string)
   "STRING should be description of single key event.
@@ -38,19 +49,10 @@ s for super,H for hyper,M for meta,while the last character
 should be printable key,like number,alphabet,etc.
 example:\"C-t\""
   (let* ((keys (reverse (split-string (string-trim " " string) "-")))
-	 (mod 0)
 	 (keysym (keysym-name->keysym (car keys))))
-    (mapc (lambda (modifier)
-	    (case (char modifier 0)	;shift lock control mod1 mod2 mod3 mod4 mod5
-	      (#\S (setf mod (logior mod #b10000000)))
-	      (#\L (setf mod (logior mod #b01000000)))
-	      (#\C (setf mod (logior mod #b00100000)))
-	      (#\1 (setf mod (logior mod #b00010000)))
-	      (#\2 (setf mod (logior mod #b00001000)))
-	      (#\3 (setf mod (logior mod #b00000100)))
-	      (#\4 (setf mod (logior mod #b00000010)))
-	      (#\5 (setf mod (logior mod #b00000001))))) (cdr keys))
-    (key-hash mod keysym)))
+    (key-hash (apply #'xlib:make-state-mask
+		     (mapcar (lambda (modifier) (abbr->mod (char modifier 0))) (cdr keys)))
+	      keysym)))
 
 (defun bind-key (keymap key action)
   "ACTION is either a command or a keymap while KEYMAP and KEY are what their names indicate.
