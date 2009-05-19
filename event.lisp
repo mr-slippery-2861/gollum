@@ -1,5 +1,37 @@
 (in-package :gollum)
 
+(defun key->mod (key)
+  (cadr (assoc key *key-mod-map*)))
+
+(defvar *lock-type* (if (find "Caps_Lock" (second *mod-key-map*) :test #'string=)
+			:caps-lock
+			:shift-lock))
+
+(defun code-state->keysym (code state)
+  (let* ((mods (xlib:make-state-keys state))
+	 (keysym-0 (xlib:keycode->keysym *display* code 0))
+	 (keysym-1 (xlib:keycode->keysym *display* code 1))
+	 (shift-p (and (find :shift mods) t))
+	 (lock-p (and (find :lock mods) t))
+	 (num-lock-p (and (find (key->mod :num-lock) mods) t)))
+    (labels ((keypad-p (keysym)
+	       (let ((keysym-name (keysym->keysym-name keysym)))
+		 (if (> (length keysym-name) 3)
+		     (string= "KP_" keysym-name :end2 3)
+		     nil))))
+      (cond
+	((and num-lock-p (keypad-p keysym-1))
+	 (if (or shift-p (and lock-p (eql *lock-type* :shift-lock)))
+	     keysym-0
+	     keysym-1))
+	((and (not shift-p) (not lock-p))
+	 keysym-0)
+	((and (not shift-p) lock-p (eql *lock-type* :caps-lock))
+	 (if (and (= (length (keysym->keysym-name keysym-0)) 1)
+		  (lower-case-p (char (keysym->keysym-name keysym-0) 0)))
+	     keysym-1
+	     keysym-0))))))
+
 (defparameter *event-handlers* (make-array 64 :initial-element nil))
 
 (defmacro define-event-handler (event-key actual-keys &body body)
