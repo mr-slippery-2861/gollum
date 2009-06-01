@@ -19,6 +19,8 @@
 	       (:file "workspace")
 	       (:file "rule")
 	       (:file "color")
+	       (:file "font")
+	       (:file "timer")
 	       (:file "screen")
 	       (:file "display")
 	       (:file "event")
