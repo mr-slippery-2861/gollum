@@ -122,9 +122,6 @@ example:(bind-key :top-map (kbd \"C-h\") :help-map)"
 	     (declare (ignore id))
 	     (init-screen screen)) (screens display)))
 
-(defmethod open-font ((d display) name)
-  (xlib:open-font (xdisplay d) name))
-
 (defun current-display ()
   *current-display*)
 
