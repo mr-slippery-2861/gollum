@@ -8,6 +8,7 @@
   :name "gollum"
   :author "Shelling Chen - fvwmer@gmail.com"
   :maintainer "Shelling Chen - fvwmer@gmail.com"
+  
   :description "My own wm"
   :depends-on (:clx :bordeaux-threads)
   :components ((:file "package")
@@ -23,7 +24,7 @@
 	       (:file "timer")
 	       (:file "screen")
 	       (:file "display")
-	       (:file "event")
+	       (:file "event" :depends-on ("display"))
 	       (:file "gollum")
 	       (:file "user")
 	       (:file "user-defaults")))
