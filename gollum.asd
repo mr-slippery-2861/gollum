@@ -23,7 +23,7 @@
 	       (:file "font")
 	       (:file "timer")
 	       (:file "screen")
-	       (:file "display")
+	       (:file "display" :depends-on ("package"))
 	       (:file "event" :depends-on ("display"))
 	       (:file "gollum")
 	       (:file "user")
