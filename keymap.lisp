@@ -1,14 +1,18 @@
 (in-package :gollum)
 
-(defun key-hash (mod keysym)
-  (+ (ash mod 32) keysym))
+(defun key->hash (state keysym)
+  (+ (ash state 32) keysym))
 
-(defun make-key-mod-map ()
-  (multiple-value-bind (shift-keycodes lock-keycodes control-keycodes mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes) (xlib:modifier-mapping *display*)
+(defun hash->key (key)
+  (values (ash key -32)
+	  (logand key #xffffffff)))
+
+(defun make-key-mod-map (xdisplay)
+  (multiple-value-bind (shift-keycodes lock-keycodes control-keycodes mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes) (xlib:modifier-mapping xdisplay)
     (labels ((mod-keycode->mod (keycode)
-	       (let ((keysym (xlib:keycode->keysym *display* keycode 0)))
+	       (let ((keysym (xlib:keycode->keysym xdisplay keycode 0)))
 		 (when (zerop keysym)
-		     (setf keysym (xlib:keycode->keysym *display* keycode 1)))
+		     (setf keysym (xlib:keycode->keysym xdisplay keycode 1)))
 		 (keysym->keysym-name keysym)))
 	     (names-in-mod-p (names mod)
 	       (loop for name in names
@@ -26,45 +30,29 @@
 	    ((names-in-mod-p (cdr key) (sixth mods)) (push (list (car key) :mod-3) map))
 	    ((names-in-mod-p (cdr key) (seventh mods)) (push (list (car key) :mod-4) map))
 	    ((names-in-mod-p (cdr key) (eighth mods)) (push (list (car key) :mod-5) map))))
-	(values map mods)))))
+	(values map mods (append shift-keycodes lock-keycodes control-keycodes mod1-keycodes mod2-keycodes mod3-keycodes mod4-keycodes mod5-keycodes ))))))
 
-(multiple-value-bind (map mods) (make-key-mod-map)
-  (defvar *key-mod-map* map)
-  (defvar *mod-key-map* mods))
-
-(defun abbr->mod (abbr)
-  "ABBR may be S(shift),A(alt),C(control),s(super),H(hyper),M(meta)"
+(defun abbr->mod (abbr key-mod-map)
+  "ABBR may be S(super),A(alt),C(control),H(hyper),M(meta)"
   (labels ((key->mod (key)
-	     (cadr (assoc key *key-mod-map*))))
+	     (cadr (assoc key key-mod-map))))
     (case abbr
-      (#\S :shift)
       (#\A (key->mod :alt))
       (#\C :control)
-      (#\s (key->mod :super))
+      (#\S (key->mod :super))
       (#\H (key->mod :hyper))
       (#\M (key->mod :meta)))))
 
-(defun kbd (string)
+(defun kbd-internal (string key-mod-map)
   "STRING should be description of single key event.
-modifiers as:S for shift,A for alt,C for control,
-s for super,H for hyper,M for meta,while the last character
+modifiers as:A for alt,C for control,
+S for super,H for hyper,M for meta,while the last character
 should be printable key,like number,alphabet,etc.
 example:\"C-t\""
   (let* ((keys (reverse (split-string (string-trim " " string) "-")))
 	 (keysym (keysym-name->keysym (car keys))))
-    (key-hash (apply #'xlib:make-state-mask
-		     (mapcar (lambda (modifier) (abbr->mod (char modifier 0))) (cdr keys)))
+    (key->hash (apply #'xlib:make-state-mask
+		     (mapcar (lambda (modifier) (abbr->mod (char modifier 0) key-mod-map)) (cdr keys)))
 	      keysym)))
 
-(defun bind-key (keymap key action)
-  "ACTION is either a command or a keymap while KEYMAP and KEY are what their names indicate.
-example:(bind-key *top-map* (kbd \"C-h\") '*help-map*)"
-  (setf (gethash key keymap) action))
 
-(defmacro define-keymap (keymap)
-  "example:(define-keymap *some-map*)"
-  `(defvar ,keymap (make-hash-table)))
-
-(define-keymap *top-map*)
-
-(define-keymap *root-map*)

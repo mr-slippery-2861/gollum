@@ -1,3 +1,3 @@
 (defpackage :gollum
-  (:use :cl :xlib))
+  (:use :cl))
 

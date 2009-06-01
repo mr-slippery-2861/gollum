@@ -31,3 +31,6 @@ and ARGS will be treated as string by default."
 
 (defun command-p (string)
   (typep (gethash (car (split-string (string-trim " " string) " ")) *user-commands*) 'command))
+
+(defun exec (program)
+  (sb-ext:run-program program nil :search t :wait nil))
