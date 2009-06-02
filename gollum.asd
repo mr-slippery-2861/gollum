@@ -27,4 +27,5 @@
 	       (:file "event" :depends-on ("display"))
 	       (:file "gollum")
 	       (:file "user" :depends-on ("package" "display"))
-	       (:file "user-defaults")))
+;	       (:file "user-defaults")
+	       ))
