@@ -12,8 +12,6 @@
   (let* ((mods (xlib:make-state-keys state))
 	 (keysym-0 (xlib:keycode->keysym (xdisplay display) code 0))
 	 (keysym-1 (xlib:keycode->keysym (xdisplay display) code 1))
-	 (keysym-name-0 (keysym->keysym-name keysym-0))
-	 (keysym-name-1 (keysym->keysym-name keysym-1))
 	 (shift-p (and (find :shift mods) t))
 	 (lock-p (and (find :lock mods) t))
 	 (num-lock-p (and (find (key->mod :num-lock (key-mod-map display)) mods) t)))
