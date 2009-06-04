@@ -34,9 +34,9 @@
 	((and shift-p lock-p (eql (lock-type display) :caps-lock))
 	 (if (lower-case-p (xlib:keysym->character (xdisplay display) keysym-0))
 	     keysym-0
-	     keysym-1)
+	     keysym-1))
 	((or shift-p (and lock-p (eql (lock-type display) :shift-lock)))
-	 keysym-1))))))
+	 keysym-1)))))
 
 (defparameter *event-handlers* (make-array 64 :initial-element nil))
 
