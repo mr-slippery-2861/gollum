@@ -41,18 +41,15 @@
 	 :accessor font
 	 :initform nil)))
 
-(defgeneric define-keymap (keymap d))
-
 (defgeneric find-keymap (keymap d))
+
+(defgeneric add-keymap (keymap display))
 
 (defgeneric bind-key (keymap key action display))
 
 (defgeneric do-bind (key d))
 
 (defgeneric add-screen-to-display (xscreen id d))
-
-(defmethod define-keymap (keymap (d display))
-  (setf (gethash keymap (keymaps d)) nil))
 
 (defmethod find-keymap (keymap (d display))
   (gethash keymap (keymaps d)))
@@ -142,6 +139,16 @@ example:(bind-key :top-map (kbd \"C-h\") :help-map)"
 (defmethod add-window ((win window) (obj display))
   (setf (gethash (id win) (windows obj)) win
 	(display win) obj))
+
+(defmethod delete-window ((win window) (obj display))
+  (let ((screen (screen win))
+	(id (id win)))
+    (setf (xwindow win) nil)		;it's a hacking,cause clx will destroy the window resource immediately when I don't know when,at least it's unavailable when we receive the destroy notify,so set xwindow to nil here to avoid further referencing which causes a window-error
+    (delete-window win screen)
+    (multiple-value-bind (w exist-p) (gethash id (windows obj))
+      (declare (ignore w))
+      (when exist-p
+	(remhash id (windows obj))))))
 
 (defun flush-display (display)
   (xlib:display-finish-output (xdisplay display)))
