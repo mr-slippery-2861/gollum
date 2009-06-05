@@ -70,10 +70,6 @@
 (defgeneric raise-workspace-window (win s)
   (:documentation "raise the window,switch to the window's workspace if needed"))
 
-(defgeneric add-window (win obj))
-
-(defgeneric delete-window (win obj))
-
 (defgeneric add-workspace-to-screen (name s))
 
 (defgeneric delete-workspace-from-screen (ws s))
@@ -112,14 +108,13 @@
 
 (defmethod delete-window ((win window) (obj screen))
   (let ((id (id win))
-	(ws (workspace win))
-	(s (screen win)))
+	(ws (workspace win)))
     (when ws
       (delete-window win ws))
-    (multiple-value-bind (w exist-p) (gethash id (windows s))
+    (multiple-value-bind (w exist-p) (gethash id (windows obj))
       (declare (ignore w))
       (when exist-p
-	(remhash id (windows s))))))
+	(remhash id (windows obj))))))
 
 (defmethod add-workspace-to-screen (name (s screen))
   (or (find-workspace-by-name name (workspaces s))
@@ -131,7 +126,7 @@
 	  (setf (current-workspace s) w)))))
 
 ;; need to process all the windows in workspace
-(defmethod delet-workspace-from-screen ((ws workspace) (s screen))
+(defmethod delete-workspace-from-screen ((ws workspace) (s screen))
   (let ((nworkspace (get-nworkspace (workspaces s))))
     (when (> nworkspace 1)
       (let* ((id (id ws))
