@@ -44,18 +44,19 @@
 	  :accessor rules
 	  :initform nil)))
 
-(defconstant +default-background-color+ "black")
 (defvar *background-color* nil)
-(defconstant +default-foreground-color+ "white")
 (defvar *foreground-color* nil)
-(defconstant +default-output-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
 (defvar *output-font* nil)
-(defconstant +default-input-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
 (defvar *input-font* nil)
-(defconstant +default-internal-bw+ 1)
 (defvar *internal-window-border-width* nil)
-(defconstant +default-internal-border+ "white")
 (defvar *internal-window-border nil)
+(eval-when (:load-toplevel)
+  (defconstant +default-background-color+ "black")
+  (defconstant +default-foreground-color+ "white")
+  (defconstant +default-output-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
+  (defconstant +default-input-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
+  (defconstant +default-internal-bw+ 1)
+  (defconstant +default-internal-border+ "white"))
 
 (defgeneric make-internel-window (s))
 
