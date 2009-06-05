@@ -50,9 +50,6 @@
 (defgeneric unmap-window (win)
   (:documentation "make a window unviewable"))
 
-(defgeneric delete-window (win all-windows)
-  (:documentation "make a window out of gollum's control"))
-
 (defgeneric window-equal (w1 w2)
   (:documentation "return T if w1 and w2 refer to the same window"))
 
@@ -61,6 +58,12 @@
 
 (defgeneric match-window (win &key class name)
   (:documentation "return T if a window satisfies the description against match-type"))
+
+(defgeneric apply-place-rule (window place-rule))
+
+(defgeneric place-window-according-to-rule (window match-rule place-rule))
+
+(defgeneric place-window (window))
 
 (defgeneric grab-key (win keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
 
@@ -78,12 +81,9 @@
     (setf (map-state win) :viewable))
   (setf (ws-map-state win) :viewable))
 
-(defmethod map-window-maybe ((win window))
-  (unless (eql (ws-map-state win) :unmapped)
-    (map-window win)))
-
 (defmethod unmap-workspace-window ((win window))
-  (when (eql (map-state win) :viewable)
+  (when (and (eql (map-state win) :viewable)
+	     (xlib:window-p (xwindow win)))
     (xlib:unmap-window (xwindow win))
     (setf (map-state win) :unmapped)))
 
