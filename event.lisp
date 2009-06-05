@@ -105,10 +105,9 @@
 (define-event-handler :destroy-notify (window)
   (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
-	 (w (xwindow-window window d))
-	 (s (screen w)))
+	 (w (xwindow-window window d)))
     (write-line (format nil "destroy-notify received,id:~a" (xlib:window-id window)) *error-output*)
-    (delete-window w s))
+    (delete-window w d))
   t)
 
 (define-event-handler :gravity-notify ()
