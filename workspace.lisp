@@ -14,6 +14,11 @@
 	     :accessor windows
 	     :initform nil)))
 
+(defgeneric add-window (win obj))
+
+(defgeneric delete-window (win obj)
+  (:documentation "make a window out of gollum's control"))
+
 (defgeneric move-window-to-workspace (win ws)
   (:documentation "move a window from its original workspace to another"))
 
