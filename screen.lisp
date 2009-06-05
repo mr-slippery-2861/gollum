@@ -50,7 +50,7 @@
 (defvar *input-font* nil)
 (defvar *internal-window-border-width* nil)
 (defvar *internal-window-border nil)
-(eval-when (:load-toplevel)
+(eval-when (:compile-toplevel)
   (defconstant +default-background-color+ "black")
   (defconstant +default-foreground-color+ "white")
   (defconstant +default-output-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
