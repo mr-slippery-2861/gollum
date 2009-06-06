@@ -44,19 +44,12 @@
 	  :accessor rules
 	  :initform nil)))
 
-(defvar *background-color* nil)
-(defvar *foreground-color* nil)
-(defvar *output-font* nil)
-(defvar *input-font* nil)
-(defvar *internal-window-border-width* nil)
-(defvar *internal-window-border nil)
-(eval-when (:compile-toplevel)
-  (defconstant +default-background-color+ "black")
-  (defconstant +default-foreground-color+ "white")
-  (defconstant +default-output-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
-  (defconstant +default-input-font+ "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
-  (defconstant +default-internal-bw+ 1)
-  (defconstant +default-internal-border+ "white"))
+(defvar *background-color* "black")
+(defvar *foreground-color* "white")
+(defvar *output-font* "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
+(defvar *input-font* "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
+(defvar *internal-window-border-width* 1)
+(defvar *internal-window-border "white")
 
 (defgeneric make-internel-window (s))
 
@@ -208,11 +201,11 @@
 							   :key-release
 							   :substructure-notify
 							   :substructure-redirect)
-	(message-font screen) (open-font (display screen) (or *output-font* +default-output-font+))
+	(message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internel-window screen)
 	(message-gc screen) (create-gcontext (message-window screen)
-				     (alloc-color (or *background-color* +default-background-color+) screen)
-				     (alloc-color (or *foreground-color* +default-foreground-color+) screen)
+				     (alloc-color *background-color* screen)
+				     (alloc-color *foreground-color* screen)
 				     (message-font screen))))
 
   
