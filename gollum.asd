@@ -24,6 +24,7 @@
 	       (:file "timer")
 	       (:file "screen" :depends-on ("package" "window" "workspace"))
 	       (:file "display" :depends-on ("package" "window"))
+	       (:file "message")
 	       (:file "event" :depends-on ("display"))
 	       (:file "gollum")
 	       (:file "user" :depends-on ("package" "display"))
