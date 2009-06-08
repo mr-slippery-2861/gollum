@@ -10,6 +10,12 @@
    (display :initarg :display
 	    :accessor display
 	    :initform nil)
+   (height :initarg :height
+	   :accessor height
+	   :initform nil)
+   (width :initarg :width
+	  :accessor width
+	  :initform nil)
    (message-gc :initarg :message-gc
 	       :accessor message-gc
 	       :initform nil)
@@ -19,6 +25,9 @@
    (message-window :initarg :message-window
 		   :accessor message-window
 		   :initform nil)
+   (message-timer :initarg :message-timer
+		  :accessor message-timer
+		  :initform nil)
    (input-gc :initarg :input-gc
 	     :accessor input-gc
 	     :initform nil)
@@ -49,7 +58,9 @@
 (defvar *output-font* "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
 (defvar *input-font* "-wenquanyi-wenquanyi bitmap song-medium-r-normal--14-0-75-75-p-0-gbk-0")
 (defvar *internal-window-border-width* 1)
-(defvar *internal-window-border "white")
+(defvar *internal-window-border* "white")
+(defvar *internal-window-vertical-padding* 1)
+(defvar *internal-window-horizontal-padding* 2)
 
 (defgeneric make-internel-window (s))
 
@@ -70,7 +81,9 @@
 
 (defgeneric xwindow-window (xwin obj))
 
-(defgeneric screen-message (screen message))
+(defgeneric screen-message (screen message &optional time-out-p))
+
+(defgeneric screen-input (screen prompt))
 
 (defgeneric add-workspaces-according-to-layout (screen))
 
@@ -167,20 +180,16 @@
       (unless (eql :on (xlib:window-override-redirect win))
 	(manage-new-window win xroot s)))))
 
-(defmethod screen-message ((screen screen) message)
-  (let* ((font (message-font screen))
-	 (height (+ (xlib:font-descent font) (xlib:font-ascent font)))
-	 (width (xlib:text-width font message))
-	 (message-window (message-window screen))
-	 (message-gc (message-gc screen)))
-    (xlib:with-state (message-window)
-      (if (eql (xlib:window-map-state message-window) :unmapped)
-	  (xlib:map-window message-window))
-      (setf (xlib:drawable-height message-window) (+ 2 height)
-	    (xlib:drawable-width message-window) (+ 2 width)
-	    (xlib:window-priority message-window) :above)
-      (xlib:clear-area message-window)
-      (xlib:draw-image-glyphs message-window message-gc 1 (xlib:font-ascent font) message :width width))))
+(defun calculate-geometry (screen xwindow gravity)
+  (let* ((height (height screen))
+	 (width (width screen))
+	 (window-height (xlib:drawable-height xwindow))
+	 (window-width (xlib:drawable-width xwindow)))
+    (case gravity
+      (:bottom-center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width (* 2 *internal-window-border-width*)) 2))
+			    (xlib:drawable-y xwindow) (- height window-height (* 2 *internal-window-border-width*))))
+      (:center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width) 2))
+		     (xlib:drawable-y xwindow) (floor (/ (- height window-height) 2)))))))
 
 (defmethod add-workspaces-according-to-layout ((screen screen))
   (if *workspace-layout*
@@ -203,10 +212,24 @@
 							   :substructure-redirect)
 	(message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internel-window screen)
+	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
+	(xlib:window-border (message-window screen)) (alloc-color *internal-window-border* screen)
 	(message-gc screen) (create-gcontext (message-window screen)
-				     (alloc-color *background-color* screen)
-				     (alloc-color *foreground-color* screen)
-				     (message-font screen))))
+					     (alloc-color *background-color* screen)
+					     (alloc-color *foreground-color* screen)
+					     (message-font screen))
+	(message-timer screen) (make-instance 'message-timer
+					      :action #'hide-screen-message
+					      :screen screen)
+	(input-font screen) (open-font (display screen) *input-font*)
+	(input-window screen) (make-internel-window screen)
+	(xlib:drawable-border-width (input-window screen)) *internal-window-border-width*
+	(xlib:window-border (input-window screen)) (alloc-color *internal-window-border* screen)
+	(input-gc screen) (create-gcontext (input-window screen)
+					   (alloc-color *background-color* screen)
+					   (alloc-color *foreground-color* screen)
+					   (input-font screen))))
+
 
   
 
