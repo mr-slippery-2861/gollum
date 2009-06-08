@@ -57,12 +57,13 @@
     (setf mods (remove-if-not (lambda (x) (typep x 'xlib:modifier-key)) mods))
     (apply #'xlib:make-state-mask mods)))
 
-(define-event-handler :key-press (code state)
+(define-event-handler :key-press (code state window)
   (declare (ignore event-key send-event-p))
-  (let* ((keysym (code-state->keysym code state (xdisplay-display display)))
+  (let* ((d (xdisplay-display display))
+	 (keysym (code-state->keysym code state d))
 	 (key (key->hash (filt-button-from-state state) keysym)))
-    (unless (find code (mod-keycodes (xdisplay-display display)))
-      (do-bind key (xdisplay-display display)))
+    (unless (find code (mod-keycodes d))
+      (do-bind key window d))
     t))
 
 (define-event-handler :key-release ()
