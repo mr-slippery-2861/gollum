@@ -30,7 +30,9 @@ and ARGS will be treated as string by default."
     (apply #'run-command-1 command)))
 
 (defun command-p (string)
-  (typep (gethash (car (split-string (string-trim " " string) " ")) *user-commands*) 'command))
+  (if (stringp string)
+      (typep (gethash (car (split-string (string-trim " " string) " ")) *user-commands*) 'command)
+      nil))
 
 (defun exec (program)
   (sb-ext:run-program program nil :search t :wait nil))
