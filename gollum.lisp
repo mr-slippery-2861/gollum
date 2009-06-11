@@ -32,5 +32,5 @@
     (load-rc)
     (init-display (current-display))
     (setf *event-threads* (bordeaux-threads:make-thread #'event-processor :name "event-processor"))
-    (setf *event-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))))
+    (setf *timer-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))))
 
