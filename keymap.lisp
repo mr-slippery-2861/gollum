@@ -1,7 +1,7 @@
 (in-package :gollum)
 
 (defun key->hash (state keysym)
-  (+ (ash state 32) keysym))
+  (+ (ash state 32) (or keysym 0)))
 
 (defun hash->key (key)
   (values (ash key -32)
@@ -43,16 +43,13 @@
       (#\H (key->mod :hyper))
       (#\M (key->mod :meta)))))
 
-(defun kbd-internal (string key-mod-map)
+(defun kbd-internal (key-desc key-mod-map)
   "STRING should be description of single key event.
 modifiers as:A for alt,C for control,
 S for super,H for hyper,M for meta,while the last character
 should be printable key,like number,alphabet,etc.
 example:\"C-t\""
-  (let* ((keys (reverse (split-string (string-trim " " string) "-")))
-	 (keysym (keysym-name->keysym (car keys))))
+  (let* ((keys (reverse (split-string key-desc "-")))
+	 (keysym (keysym-name->keysym (string-trim " " (car keys)))))
     (key->hash (apply #'xlib:make-state-mask
-		     (mapcar (lambda (modifier) (abbr->mod (char modifier 0) key-mod-map)) (cdr keys)))
-	      keysym)))
-
-
+		      (mapcar (lambda (modifier) (abbr->mod (char (string-trim " " modifier) 0) key-mod-map)) (cdr keys))) keysym)))
