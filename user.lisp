@@ -12,11 +12,8 @@
 	(raise-workspace-window win (current-screen nil))
 	(exec program))))
 
-(defun set-key (keymap key action)
-  (bind-key keymap key action (current-display)))
-
-(defun kbd (string)
-  (kbd-internal string (key-mod-map (current-display))))
+(defun set-key (keymap key-desc action)
+  (bind-key keymap key-desc action (current-display)))
 
 (defun define-keymap (keymap)
   (add-keymap keymap (current-display)))
