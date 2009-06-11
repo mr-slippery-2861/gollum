@@ -37,6 +37,9 @@
    (input-window :initarg :input-window
 		 :accessor input-window
 		 :initform nil)
+   (input-buffer :initarg :input-buffer
+		 :accessor input-buffer
+		 :initform nil)
    (root :initarg :root
 	 :accessor root
 	 :initform nil)
