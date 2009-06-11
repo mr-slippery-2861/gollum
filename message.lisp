@@ -23,7 +23,8 @@
       (xlib:draw-rectangle message-window message-gc 0 0 (xlib:drawable-width message-window) (xlib:drawable-height message-window) t))
     (xlib:draw-image-glyphs message-window message-gc *internal-window-horizontal-padding* (+ *internal-window-vertical-padding* (xlib:font-ascent font)) message)
     (when time-out-p
-      (schedule-timer (message-timer screen)))))
+      (schedule-timer (message-timer screen)))
+    (flush-display (display screen))))
 
 (defun message (control-string &rest format-arguments)
   (screen-message (current-screen nil) (apply #'format nil control-string format-arguments)))
