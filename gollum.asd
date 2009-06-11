@@ -8,11 +8,10 @@
   :name "gollum"
   :author "Shelling Chen - fvwmer@gmail.com"
   :maintainer "Shelling Chen - fvwmer@gmail.com"
-  
   :description "My own wm"
   :depends-on (:clx :bordeaux-threads)
   :components ((:file "package")
-	       (:file "util")
+	       (:file "util" :depends-on ("package"))
 	       (:file "command")
 	       (:file "keysymdef")
 	       (:file "keymap")
