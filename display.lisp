@@ -45,7 +45,7 @@
 
 (defgeneric add-keymap (keymap display))
 
-(defgeneric bind-key (keymap key action display))
+(defgeneric bind-key (keymap key-desc action display))
 
 (defgeneric do-bind (key window display))
 
@@ -57,15 +57,20 @@
 (defmethod add-keymap (keymap (d display))
   (setf (gethash keymap (keymaps d)) (make-hash-table)))
 
-(defmethod bind-key (keymap key action (d display))
+(defmethod bind-key (keymap key-desc action (display display))
   "ACTION is either a command or a keymap while KEYMAP and KEY are what their names indicate.
-example:(bind-key :top-map (kbd \"C-h\") :help-map)"
-  (when (eql keymap :top-map )
-    (multiple-value-bind (state keysym) (hash->key key)
-      (let ((keycode (xlib:keysym->keycodes (xdisplay d) keysym)))
-	(loop for k being the hash-keys in (screens d) using (hash-value screen)
-	   do (grab-key (root screen) keycode :modifiers state :owner-p t :sync-pointer-p nil :sync-keyboard-p nil)))))
-  (setf (gethash key (gethash keymap (keymaps d))) action))
+example:(bind-key :top-map \"C-h\" :help-map)"
+  (let ((key (kbd-internal key-desc (key-mod-map display))))
+    (when (eql keymap :top-map )
+      (multiple-value-bind (state keysym) (hash->key key)
+	(let ((keycode (xlib:keysym->keycodes (xdisplay display) keysym)))
+	  (loop for k being the hash-keys in (screens display) using (hash-value screen)
+	     do (grab-key (root screen) keycode :modifiers state :owner-p t :sync-pointer-p nil :sync-keyboard-p nil)))))
+    (setf (gethash key (gethash keymap (keymaps display))) action)))
+
+(defun symbol->function (symbol)
+  (handler-case (symbol-function symbol)
+    (undefined-function () nil)))
 
 (defmethod do-bind (key xwindow (display display))
   (when (eql (current-keymap display) :top-map)
@@ -80,11 +85,12 @@ example:(bind-key :top-map (kbd \"C-h\") :help-map)"
 				  (run-command action)
 				  (xlib:ungrab-keyboard (xdisplay display))
 				  (setf (current-keymap display) :top-map)))
-	    ((functionp action) (progn	;if it's a function,we call it
-				  (apply action args)
-				  (xlib:ungrab-keyboard (xdisplay display))
-				  (setf (current-keymap display) :top-map)))
-	    (t (setf (current-keymap display) action)))) ;else,we asume it a keymap,so set the keymap state
+	    ((symbol->function action) (progn	;if it's a function,we call it
+					 (apply (symbol->function action) args)
+					 (unless (eql (current-keymap display) :input-map)
+					   (xlib:ungrab-keyboard (xdisplay display))
+					   (setf (current-keymap display) :top-map))))
+	    ((keywordp action) (setf (current-keymap display) action)))) ;else,we asume it a keymap,so set the keymap state
 	(progn				      ;there is no action corresponding the key
 	  (setf (current-keymap display) :top-map)
 	  (xlib:ungrab-keyboard (xdisplay display))
@@ -111,6 +117,7 @@ example:(bind-key :top-map (kbd \"C-h\") :help-map)"
     (update-lock-type display)
     (add-keymap :top-map display)
     (add-keymap :input-map display)
+    (setup-input-map display)
     (setf (gethash id *all-displays*) display
 	  *current-display* display)
     (dolist (xscreen (xlib:display-roots xdisplay))
