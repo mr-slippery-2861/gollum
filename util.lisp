@@ -29,3 +29,6 @@ at the end of STRING, we don't include a null substring for that.
 
 Modifies the match data; use `save-match-data' if necessary."
   (split-seq string separators :test #'char= :default-value '("")))
+
+(defmacro concat (&rest strings)
+  `(concatenate 'string ,@strings))
