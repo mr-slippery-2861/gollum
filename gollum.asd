@@ -10,11 +10,12 @@
   :maintainer "Shelling Chen - fvwmer@gmail.com"
   :description "My own wm"
   :depends-on (:clx :bordeaux-threads)
+  :serial t
   :components ((:file "package")
 	       (:file "util" :depends-on ("package"))
 	       (:file "command")
 	       (:file "keysymdef")
-	       (:file "keymap")
+	       (:file "keymap" :depends-on ("package"))
 	       (:file "window" :depends-on ("package"))
 	       (:file "workspace" :depends-on ("package" "window"))
 	       (:file "rule")
