@@ -63,12 +63,13 @@
   "ACTION is either a command or a keymap while KEYMAP and KEY are what their names indicate.
 example:(bind-key :top-map \"C-h\" :help-map)"
   (let ((key (kbd-internal key-desc (key-mod-map display))))
-    (when (eql keymap :top-map )
-      (multiple-value-bind (state keysym) (hash->key key)
-	(let ((keycode (xlib:keysym->keycodes (xdisplay display) keysym)))
-	  (loop for k being the hash-keys in (screens display) using (hash-value screen)
-	     do (grab-key (root screen) keycode :modifiers state :owner-p t :sync-pointer-p nil :sync-keyboard-p nil)))))
-    (setf (gethash key (gethash keymap (keymaps display))) action)))
+    (when (plusp key)
+      (when (eql keymap :top-map )
+	(multiple-value-bind (state keysym) (hash->key key)
+	  (let ((keycode (xlib:keysym->keycodes (xdisplay display) keysym)))
+	    (loop for k being the hash-keys in (screens display) using (hash-value screen)
+	       do (grab-key (root screen) keycode :modifiers state :owner-p t :sync-pointer-p nil :sync-keyboard-p nil)))))
+      (setf (gethash key (gethash keymap (keymaps display))) action))))
 
 (defmethod describe-key (key-desc (display display) &optional (kmap :top-map))
   (let ((key-seq (split-string key-desc " "))
