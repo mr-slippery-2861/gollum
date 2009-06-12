@@ -61,7 +61,7 @@
 
 (defun filt-state (state)
   (let ((mods (xlib:make-state-keys state)))
-    (setf mods (remove :shift (remove-if-not (lambda (x) (typep x 'xlib:modifier-key)) mods)))
+    (setf mods (remove :lock (remove :shift (remove-if-not (lambda (x) (typep x 'xlib:modifier-key)) mods))))
     (apply #'xlib:make-state-mask mods)))
 
 (define-event-handler :key-press (code state window)
