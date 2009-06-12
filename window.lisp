@@ -16,6 +16,18 @@
    (display :initarg :display
 	    :accessor display
 	    :initform nil)
+   (orig-x :initarg :orig-x
+	   :accessor orig-x
+	   :initform nil)
+   (orig-y :initarg :orig-y
+	   :accessor orig-y
+	   :initform nil)
+   (orig-width :initarg :orig-width
+	       :accessor orig-width
+	       :initform nil)
+   (orig-height :initarg :orig-height
+		:accessor orig-height
+		:initform nil)
    (title :initarg :title		;it's the title bar,as my plan,it can be a gtk window
 	  :accessor title
 	  :initform nil)
@@ -65,9 +77,17 @@
 
 (defgeneric place-window (window))
 
+(defgeneric maximize-window (window))
+
+(defgeneric restore-window (window))
+
 (defgeneric grab-key (win keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
 
+(defgeneric ungrab-key (win keycode &key modifiers))
+
 (defgeneric grab-keyboard (win &key owner-p sync-pointer-p sync-keyboard-p))
+
+(defgeneric ungrab-keyboard (display &key time))
 
 (defmethod map-workspace-window ((win window))
   (unless (eql (ws-map-state win) :unmapped)
@@ -113,8 +133,43 @@
      when (match-window v :class class :name name)
      return v))
 
+(defmethod maximize-window ((window window))
+  (let* ((screen (screen window))
+	 (max-width (width screen))
+	 (max-height (height screen))
+	 (xwindow (xwindow window)))
+    (xlib:with-state (xwindow)
+      (setf (xlib:drawable-width xwindow) max-width
+	    (xlib:drawable-height xwindow) max-height))
+    (flush-display (display window))))
+
+(defun maximize ()
+  (maximize-window (current-window nil)))
+
+(defmethod restore-window ((window window))
+  (let* ((x (orig-x window))
+	 (y (orig-y window))
+	 (width (orig-width window))
+	 (height (orig-height window))
+	 (xwindow (xwindow window)))
+    (xlib:with-state (xwindow)
+      (setf (xlib:drawable-x xwindow) x
+	    (xlib:drawable-y xwindow) y
+	    (xlib:drawable-width xwindow) width
+	    (xlib:drawable-height xwindow) height))
+    (flush-display (display window))))
+
+(defun restore ()
+  (restore-window (current-window nil)))
+
 (defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-key (xwindow win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
+(defmethod ungrab-key ((window window) keycode &key (modifiers 0))
+  (xlib:ungrab-key (xwindow window) keycode :modifiers modifiers))
+
 (defmethod grab-keyboard ((win window) &key owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-keyboard (xwindow win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
+
+(defmethod ungrab-keyboard ((display display) &key time)
+  (xlib:ungrab-keyboard (xdisplay display) :time time))

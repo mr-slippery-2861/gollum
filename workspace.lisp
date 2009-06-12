@@ -12,7 +12,10 @@
 	   :initform nil)
    (windows :initarg :windows		;it's by stacking order?
 	     :accessor windows
-	     :initform nil)))
+	     :initform nil)
+   (current-window :initarg :current-window
+		   :accessor current-window
+		   :initform nil)))
 
 (defgeneric add-window (win obj))
 
@@ -85,6 +88,8 @@
   (let ((windows-list (windows ws)))
     (mapcar (lambda (win) (win-name win)) windows-list)))
 
+(defmethod current-window ((obj null))
+  (current-window (current-workspace nil)))
+
 (defvar *workspace-layout* nil
   "A list of strings whose elements are the names of workspaces.")
-

@@ -34,3 +34,7 @@
     (setf *event-threads* (bordeaux-threads:make-thread #'event-processor :name "event-processor"))
     (setf *timer-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))))
 
+(defun gollum-quit ()
+  (bordeaux-threads:destroy-thread *event-threads*)
+  (bordeaux-threads:destroy-thread *timer-threads*)
+  (close-display (current-display)))

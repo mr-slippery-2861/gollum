@@ -40,6 +40,12 @@
    (input-buffer :initarg :input-buffer
 		 :accessor input-buffer
 		 :initform nil)
+   (input-buffer-lock :initarg :input-buffer-lock
+		      :accessor input-buffer-lock
+		      :initform (bordeaux-threads:make-recursive-lock "input-buffer-lock"))
+   (input-cv :initarg :input-cv
+	     :accessor input-cv
+	     :initform (bordeaux-threads:make-condition-variable))
    (root :initarg :root
 	 :accessor root
 	 :initform nil)
@@ -161,7 +167,11 @@
 	   (pwin (xwindow-window xparent screen))) ;FIXME:what if we can not find the parent?
       (setf (parent win) pwin
 	    (win-name win) (xlib:wm-name xwindow)
-	    (win-class win) wm-class)
+	    (win-class win) wm-class
+	    (orig-x win) (xlib:drawable-x xwindow)
+	    (orig-y win) (xlib:drawable-y xwindow)
+	    (orig-width win) (xlib:drawable-width xwindow)
+	    (orig-height win) (xlib:drawable-height xwindow))
       (add-window win (display screen))
       (add-window win screen))))
 

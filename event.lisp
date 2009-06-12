@@ -14,7 +14,8 @@
 	 (keysym-1 (xlib:keycode->keysym (xdisplay display) code 1))
 	 (shift-p (and (find :shift mods) t))
 	 (lock-p (and (find :lock mods) t))
-	 (num-lock-p (and (find (key->mod :num-lock (key-mod-map display)) mods) t)))
+	 (num-lock-p (and (find (key->mod :num-lock (key-mod-map display)) mods) t))
+	 (keysym0-character (xlib:keysym->character (xdisplay display) keysym-0)))
     (labels ((keypad-p (keysym)
 	       (let ((keysym-name (keysym->keysym-name keysym)))
 		 (if (> (length keysym-name) 3)
@@ -28,11 +29,12 @@
 	((and (not shift-p) (not lock-p))
 	 keysym-0)
 	((and (not shift-p) lock-p (eql (lock-type display) :caps-lock))
-	 (if (lower-case-p (xlib:keysym->character (xdisplay display) keysym-0))
+	 (if (and (characterp keysym0-character) (lower-case-p keysym0-character))
 	     keysym-1
 	     keysym-0))
 	((and shift-p lock-p (eql (lock-type display) :caps-lock))
-	 (if (lower-case-p (xlib:keysym->character (xdisplay display) keysym-0))
+	 (write-line "3nd cond")
+	 (if (and (characterp keysym0-character) (lower-case-p keysym0-character))
 	     keysym-0
 	     keysym-1))
 	((or shift-p (and lock-p (eql (lock-type display) :shift-lock)))
@@ -57,11 +59,16 @@
     (setf mods (remove-if-not (lambda (x) (typep x 'xlib:modifier-key)) mods))
     (apply #'xlib:make-state-mask mods)))
 
+(defun filt-state (state)
+  (let ((mods (xlib:make-state-keys state)))
+    (setf mods (remove :shift (remove-if-not (lambda (x) (typep x 'xlib:modifier-key)) mods)))
+    (apply #'xlib:make-state-mask mods)))
+
 (define-event-handler :key-press (code state window)
   (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (keysym (code-state->keysym code state d))
-	 (key (key->hash (filt-button-from-state state) keysym)))
+	 (key (key->hash (filt-state state) keysym))) ;FIME:we simply filt :shift out
     (unless (find code (mod-keycodes d))
       (do-bind key window d))
     t))

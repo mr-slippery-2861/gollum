@@ -43,6 +43,42 @@
       (#\H (key->mod :hyper))
       (#\M (key->mod :meta)))))
 
+(defun key-name->keysym-name (key-name)
+  (cond
+    ((string= key-name "!") "exclam")
+    ((string= key-name "\"") "quotedbl")
+    ((string= key-name "#") "numbersign")
+    ((string= key-name "$") "dollar")
+    ((string= key-name "%") "percent")
+    ((string= key-name "&") "ampersand")
+    ((string= key-name "'") "apostrophe")
+    ((string= key-name "(") "parenleft")
+    ((string= key-name ")") "parenright")
+    ((string= key-name "*") "asterisk")
+    ((string= key-name "+") "plus")
+    ((string= key-name ",") "comma")
+    ((string= key-name "-") "minus")
+    ((string= key-name ".") "period")
+    ((string= key-name "/") "slash")
+    ((string= key-name ":") "colon")
+    ((string= key-name ";") "semicolon")
+    ((string= key-name "<") "less")
+    ((string= key-name "=") "equal")
+    ((string= key-name ">") "greater")
+    ((string= key-name "?") "question")
+    ((string= key-name "@") "at")
+    ((string= key-name "[") "bracketleft")
+    ((string= key-name "\\") "backslash")
+    ((string= key-name "]") "bracketright")
+    ((string= key-name "^") "asciicircum")
+    ((string= key-name "_") "underscore")
+    ((string= key-name "`") "grave")
+    ((string= key-name "{") "braceleft")
+    ((string= key-name "|") "bar")
+    ((string= key-name "}") "braceright")
+    ((string= key-name "~") "asciitilde")
+    (t key-name)))
+
 (defun kbd-internal (key-desc key-mod-map)
   "STRING should be description of single key event.
 modifiers as:A for alt,C for control,
@@ -50,6 +86,6 @@ S for super,H for hyper,M for meta,while the last character
 should be printable key,like number,alphabet,etc.
 example:\"C-t\""
   (let* ((keys (reverse (split-string key-desc "-")))
-	 (keysym (keysym-name->keysym (string-trim " " (car keys)))))
+	 (keysym (keysym-name->keysym (key-name->keysym-name (string-trim " " (car keys))))))
     (key->hash (apply #'xlib:make-state-mask
 		      (mapcar (lambda (modifier) (abbr->mod (char (string-trim " " modifier) 0) key-mod-map)) (cdr keys))) keysym)))

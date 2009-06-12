@@ -47,6 +47,8 @@
 
 (defgeneric bind-key (keymap key-desc action display))
 
+(defgeneric describe-key (key-desc display &optional kmap))
+
 (defgeneric do-bind (key window display))
 
 (defgeneric add-screen-to-display (xscreen id d))
@@ -68,9 +70,26 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 	     do (grab-key (root screen) keycode :modifiers state :owner-p t :sync-pointer-p nil :sync-keyboard-p nil)))))
     (setf (gethash key (gethash keymap (keymaps display))) action)))
 
+(defmethod describe-key (key-desc (display display) &optional (kmap :top-map))
+  (let ((key-seq (split-string key-desc " "))
+	(keymap kmap))
+    (dolist (kbd key-seq)
+      (let ((key (kbd-internal kbd (key-mod-map display))))
+	(multiple-value-bind (action exist-p) (gethash key (find-keymap keymap display))
+	  (if exist-p
+	      (let ((args (if (listp action) (cdr action) nil))
+		    (action (if (listp action) (car action) action)))
+		(cond ((command-p action) (return-from describe-key action))
+		      ((symbol->function action) (return-from describe-key action))
+		      ((keywordp action) (setf keymap action))
+		      (t (return-from describe-key nil))))
+	      (return-from describe-key nil)))))
+    keymap))
+
 (defun symbol->function (symbol)
   (handler-case (symbol-function symbol)
-    (undefined-function () nil)))
+    (undefined-function () nil)
+    (type-error () nil)))
 
 (defmethod do-bind (key xwindow (display display))
   (when (eql (current-keymap display) :top-map)
@@ -86,7 +105,7 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 				  (xlib:ungrab-keyboard (xdisplay display))
 				  (setf (current-keymap display) :top-map)))
 	    ((symbol->function action) (progn	;if it's a function,we call it
-					 (apply (symbol->function action) args)
+					 (apply (symbol-function action) args)
 					 (unless (eql (current-keymap display) :input-map)
 					   (xlib:ungrab-keyboard (xdisplay display))
 					   (setf (current-keymap display) :top-map))))
@@ -117,7 +136,10 @@ example:(bind-key :top-map \"C-h\" :help-map)"
     (update-lock-type display)
     (add-keymap :top-map display)
     (add-keymap :input-map display)
-    (setup-input-map display)
+    (add-keymap :root-map display)
+    (add-keymap :window-map display)
+;    (setup-input-map display)
+    (setup-default-bindings display)
     (setf (gethash id *all-displays*) display
 	  *current-display* display)
     (dolist (xscreen (xlib:display-roots xdisplay))
@@ -125,6 +147,13 @@ example:(bind-key :top-map \"C-h\" :help-map)"
       (if (eql xscreen (xlib:display-default-screen xdisplay))
 	  (setf (current-screen display) ;set current-screen to the default screen of the display
 		(gethash (1- (hash-table-count (screens display))) (screens display)))))))
+
+(defun close-display (display)
+  (let* ((xdisplay (xdisplay display))
+	 (id (xlib:display-display xdisplay)))
+    (xlib:close-display xdisplay)
+    (remhash id *all-displays*)
+    (setf *current-display* nil)))
 
 (defun init-display (display)
   (maphash (lambda (id screen)
