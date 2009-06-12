@@ -171,5 +171,3 @@
 (defmethod grab-keyboard ((win window) &key owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-keyboard (xwindow win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
-(defmethod ungrab-keyboard ((display display) &key time)
-  (xlib:ungrab-keyboard (xdisplay display) :time time))
