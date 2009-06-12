@@ -219,9 +219,7 @@
 (defmethod init-screen ((screen screen))
   (add-workspaces-according-to-layout screen)
   (manage-existing-windows screen)
-  (setf (xlib:window-event-mask (xwindow (root screen))) '(:key-press
-							   :key-release
-							   :substructure-notify
+  (setf (xlib:window-event-mask (xwindow (root screen))) '(:substructure-notify
 							   :substructure-redirect)
 	(message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internel-window screen)
