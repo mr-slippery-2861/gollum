@@ -199,3 +199,5 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 (defun flush-display (display)
   (xlib:display-finish-output (xdisplay display)))
 
+(defmethod ungrab-keyboard ((display display) &key time)
+  (xlib:ungrab-keyboard (xdisplay display) :time time))
