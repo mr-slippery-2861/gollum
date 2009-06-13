@@ -31,11 +31,11 @@
    (title :initarg :title		;it's the title bar,as my plan,it can be a gtk window
 	  :accessor title
 	  :initform nil)
-   (win-name :initarg :win-name
-	     :accessor win-name
+   (wm-name :initarg :wm-name
+	     :accessor wm-name
 	     :initform nil)
-   (win-class :initarg :win-class
-	      :accessor win-class
+   (wm-class :initarg :wm-class
+	      :accessor wm-class
 	      :initform nil)
    (group :initarg :group		;this is not the same as group in stumpwm at all!more like in starcraft
 	  :accessor group
@@ -81,6 +81,8 @@
 
 (defgeneric restore-window (window))
 
+(defgeneric minimize-window (window))
+
 (defgeneric grab-key (win keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
 
 (defgeneric ungrab-key (win keycode &key modifiers))
@@ -89,11 +91,19 @@
 
 (defgeneric ungrab-keyboard (display &key time))
 
+(defun mapped (window)
+  (eql (map-state window) :viewable))
+
+(defun not-mapped (window)
+  (eql (map-state window) :unmapped))
+
+(defun should-be-mapped (window)
+  (eql (ws-map-state window) :viewable))
+
 (defmethod map-workspace-window ((win window))
-  (unless (eql (ws-map-state win) :unmapped)
-    (when (eql (map-state win) :unmapped)
-      (xlib:map-window (xwindow win))
-      (setf (map-state win) :viewable))))
+  (when (and (plusp (get-wm-state win)) (should-be-mapped win) (not-mapped win))
+    (xlib:map-window (xwindow win))
+    (setf (map-state win) :viewable)))
 
 (defmethod map-window ((win window))
   (when (eql (map-state win) :unmapped)
@@ -102,8 +112,7 @@
   (setf (ws-map-state win) :viewable))
 
 (defmethod unmap-workspace-window ((win window))
-  (when (and (eql (map-state win) :viewable)
-	     (xlib:window-p (xwindow win)))
+  (when (mapped win)
     (xlib:unmap-window (xwindow win))
     (setf (map-state win) :unmapped)))
 
@@ -125,8 +134,8 @@
 
 (defmethod match-window ((win window) &key class name)
   (and
-   (if (null class) t (string= (win-class win) class))
-   (if (null name) t (string= (win-name win) name))))
+   (if (null class) t (string= (wm-class win) class))
+   (if (null name) t (string= (wm-name win) name))))
 
 (defun find-matching-window (all-windows &key class name)
   (loop for k being the hash-keys in all-windows using (hash-value v)
@@ -171,3 +180,8 @@
 (defmethod grab-keyboard ((win window) &key owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-keyboard (xwindow win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
+(defun get-wm-state (window)
+  (car (xlib:get-property (xwindow window) :WM_STATE)))
+
+(defun set-wm-state (xwindow state)
+  (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
