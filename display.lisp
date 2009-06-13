@@ -64,7 +64,7 @@
 example:(bind-key :top-map \"C-h\" :help-map)"
   (let ((key (kbd-internal key-desc (key-mod-map display))))
     (when (plusp key)
-      (when (eql keymap :top-map )
+      (when (eql keymap :top-map)
 	(multiple-value-bind (state keysym) (hash->key key)
 	  (let ((keycode (xlib:keysym->keycodes (xdisplay display) keysym)))
 	    (loop for k being the hash-keys in (screens display) using (hash-value screen)
@@ -114,7 +114,7 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 	(progn				      ;there is no action corresponding the key
 	  (setf (current-keymap display) :top-map)
 	  (xlib:ungrab-keyboard (xdisplay display))
-	  (screen-message (current-screen display) "no action binded to key")))))
+	  (screen-message (current-screen display) (format nil "no action bind,I'm ~a,event is ~a" (bordeaux-threads:thread-name (bordeaux-threads:current-thread)) key))))))
 
 (defun update-key-mod-map (display)
   (multiple-value-bind (map mods mod-keycodes) (make-key-mod-map (xdisplay display))
@@ -135,11 +135,12 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 				 :current-keymap :top-map)))
     (update-key-mod-map display)
     (update-lock-type display)
+    (setf (xlib:display-error-handler xdisplay) *error-handlers*)
     (add-keymap :top-map display)
     (add-keymap :input-map display)
     (add-keymap :root-map display)
     (add-keymap :window-map display)
-;    (setup-input-map display)
+    (setup-input-map display)
     (setup-default-bindings display)
     (setf (gethash id *all-displays*) display
 	  *current-display* display)
@@ -189,7 +190,7 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 (defmethod delete-window ((win window) (obj display))
   (let ((screen (screen win))
 	(id (id win)))
-    (setf (xwindow win) nil)		;it's a hacking,cause clx will destroy the window resource immediately when I don't know when,at least it's unavailable when we receive the destroy notify,so set xwindow to nil here to avoid further referencing which causes a window-error
+    (setf (map-state win) :unmapped)
     (delete-window win screen)
     (multiple-value-bind (w exist-p) (gethash id (windows obj))
       (declare (ignore w))
