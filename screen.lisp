@@ -166,8 +166,8 @@
 	   (win (make-instance 'window :id id :xwindow xwindow :map-state map-state :ws-map-state map-state))
 	   (pwin (xwindow-window xparent screen))) ;FIXME:what if we can not find the parent?
       (setf (parent win) pwin
-	    (win-name win) (xlib:wm-name xwindow)
-	    (win-class win) wm-class
+	    (wm-name win) (xlib:wm-name xwindow)
+	    (wm-class win) wm-class
 	    (orig-x win) (xlib:drawable-x xwindow)
 	    (orig-y win) (xlib:drawable-y xwindow)
 	    (orig-width win) (xlib:drawable-width xwindow)
@@ -191,6 +191,7 @@
 	  (root s) root)
     (dolist (win window-list)
       (unless (eql :on (xlib:window-override-redirect win))
+	(set-wm-state win (case (xlib:window-map-state win) (:unmapped 0) (:viewable 1)))
 	(manage-new-window win xroot s)))))
 
 (defun calculate-geometry (screen xwindow gravity)
