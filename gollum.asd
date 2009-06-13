@@ -23,6 +23,7 @@
 	       (:file "font")
 	       (:file "timer")
 	       (:file "screen"); :depends-on ("package" "window" "workspace"))
+	       (:file "error")
 	       (:file "display"); :depends-on ("package" "window"))
 	       (:file "message")
 	       (:file "input")
