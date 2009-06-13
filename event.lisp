@@ -105,29 +105,33 @@
   (let* ((d (xdisplay-display display))
 	 (p (xwindow-window parent d))
 	 (s (screen p)))
-    (write-line (format nil "create-notify received,id:~a" (xlib:window-id window)) *error-output*)
     (unless override-redirect-p
-      (manage-new-window window parent s)))
+      (set-wm-state window 0)		;0 for withdrawn while 1 for normal
+      (and window (manage-new-window window parent s))))
   t)
 
 (define-event-handler :destroy-notify (window)
   (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d)))
-    (write-line (format nil "destroy-notify received,id:~a" (xlib:window-id window)) *error-output*)
-    (delete-window w d))
+    (message "destroy-notify received,id:~a" (xlib:window-id window))
+    (when w
+      (delete-window w d)))
   t)
 
 (define-event-handler :gravity-notify ()
   (declare (ignore display event-key send-event-p))
   t)
 
-(define-event-handler :map-notify ()
+(define-event-handler :map-notify (window override-redirect-p)
   (declare (ignore display event-key send-event-p))
+  (unless override-redirect-p
+    (message "map-notify received,window ~a" (xlib:get-wm-class window)))
   t)
 
-(define-event-handler :reparent-notify ()
+(define-event-handler :reparent-notify (window parent override-redirect-p)
   (declare (ignore display event-key send-event-p))
+  (message "window ~a reparented to its new parent ~a" (xlib:get-wm-class window) (xlib:get-wm-class parent))
   t)
 
 (define-event-handler :unmap-notify ()
@@ -161,13 +165,24 @@
   (xlib:display-finish-output display)
   t)
 
+(defun withdrawn-to-mapped (window)
+  (let* ((workspace (workspace window))
+	 (withdrawn (withdrawn-windows workspace))
+	 (mapped (mapped-windows workspace)))
+    (setf (withdrawn-windows workspace) (remove window withdrawn :test #'window-equal)
+	  (mapped-windows workspace) (list* window mapped)))) ;FIXME:which position to put
+
 (define-event-handler :map-request (window)
   (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
-	 (w (xwindow-window window d)))
-    (write-line "map-request received" *error-output*)
-    (map-window w)
-    (xlib:display-finish-output display))
+	 (w (xwindow-window window d))
+	 (ws (workspace w)))
+    (setf (ws-map-state w) :viewable)
+    (set-wm-state window 1)		;1 for normal
+    (withdrawn-to-mapped w)
+    (when (workspace-equal (current-workspace (current-screen d)) ws)
+      (map-workspace-window w)
+      (flush-display d)))
   t)
 
 (define-event-handler :resize-request (window width height)
@@ -179,6 +194,7 @@
   t)
 
 (defun event-processor (&optional (display (current-display)))
-  (loop
+  (loop 
      (xlib:process-event (xdisplay display) :handler *event-handlers*)))
+
 
