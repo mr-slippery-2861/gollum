@@ -1,11 +1,5 @@
 (in-package :gollum)
 
-;; errors in clx:
-;; access-error alloc-error atom-error closed-display colormap-error connection-failure cursor-error device-busy drawable-error font-error gcontext-error id-choice-error implementation-error length-error lookup-error match-error missing-parameter name-error pixmap-error reply-length-error reply-timeout request-error resource-error sequence-error server-disconnect unexpected-reply unknown-error value-error window-error
-(defun error-handler (display error-key &rest key-vals &key asynchronous &allow-other-keys)
-  "Handle X errors"
-  ())
-
 (defvar *event-threads* nil)
 
 ;; (bordeaux-threads:make-thread #'thread-test :name "test" :initial-bindings '((what . :this)))
