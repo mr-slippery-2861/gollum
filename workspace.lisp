@@ -10,9 +10,12 @@
    (screen :initarg :screen
 	   :accessor screen
 	   :initform nil)
-   (windows :initarg :windows		;it's by stacking order?
-	     :accessor windows
-	     :initform nil)
+   (mapped-windows :initarg :mapped-windows ;FIXME:windows sorted by stack order?
+		   :accessor mapped-windows
+		   :initform nil)
+   (withdrawn-windows :initarg :withdrawn-windows
+		      :accessor withdrawn-windows
+		      :initform nil)
    (current-window :initarg :current-window
 		   :accessor current-window
 		   :initform nil)))
@@ -34,8 +37,12 @@
 (defgeneric map-workspace (ws)
   (:documentation "map all the windows in a workspace"))
 
-(defgeneric list-workspace-windows (ws)
+(defgeneric list-workspace-windows (ws &key name class)
   (:documentation "list the windows of the workspace"))
+
+(defgeneric workspace-next-window (workspace))
+
+(defgeneric workspace-prev-window (workspace))
 
 (defun next-workspace-id (workspaces)
   (1+ (hash-table-count workspaces)))
@@ -62,13 +69,16 @@
 
 (defmethod add-window ((win window) (obj workspace))
   (setf (workspace win) obj)
-  (push win (windows obj))
+  (case (get-wm-state win)
+    (0 (push win (withdrawn-windows obj)))
+    (1 (push win (mapped-windows obj)))) ;FIXME:which position to put
   (when (workspace-equal obj (current-workspace (screen win)))
     (map-workspace-window win)))
 
 (defmethod delete-window ((win window) (obj workspace))
-  (setf (workspace win) nil
-	(windows obj) (remove win (windows obj) :test #'window-equal))
+  (setf (workspace win) nil)
+  (setf (withdrawn-windows obj) (remove win (withdrawn-windows obj) :test #'window-equal))
+  (setf (mapped-windows obj) (remove win (mapped-windows obj) :test #'window-equal))
   (when (workspace-equal obj (current-workspace (screen win)))
     (unmap-workspace-window win)))
 
@@ -84,12 +94,35 @@
 (defmethod unmap-workspace ((ws workspace))
   (mapc #'unmap-workspace-window (windows ws)))
 
-(defmethod list-workspace-windows ((ws workspace))
-  (let ((windows-list (windows ws)))
-    (mapcar (lambda (win) (win-name win)) windows-list)))
+(defmethod list-workspace-windows ((ws workspace) &key (name t) class)
+  (let ((windows-list (mapped-windows ws)))
+    (mapcar (lambda (win) (list (and name (wm-name win)) (and class (wm-class win)))) windows-list)))
 
 (defmethod current-window ((obj null))
   (current-window (current-workspace nil)))
+
+(defmethod workspace-next-window ((workspace workspace))
+  (let ((windows (mapped-windows workspace)))
+    (when (> (length windows) 1)
+      (let ((current (car windows))
+	    (next (cadr windows)))
+	(setf (mapped-windows workspace) (append (cdr windows) (list current))
+	      (current-window workspace) next)
+	(raise-window next)))))
+
+(defun next-window ()
+  (workspace-next-window (current-workspace nil)))
+
+(defmethod workspace-prev-window ((workspace workspace))
+  (let ((windows (mapped-windows workspace)))
+    (when (> (length windows) 1)
+      (let ((prev (car (last windows))))
+	(setf (mapped-windows workspace) (list* prev (butlast windows))
+	      (current-window workspace) prev)
+	(raise-window prev)))))
+
+(defun prev-window ()
+  (workspace-prev-window (current-workspace nil)))
 
 (defvar *workspace-layout* nil
   "A list of strings whose elements are the names of workspaces.")
