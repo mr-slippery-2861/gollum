@@ -22,9 +22,9 @@
 (defun gollum (display-name)
   (multiple-value-bind (host display screen protocol) (parse-display-name display-name)
     (declare (ignore screen))
-    (open-display host :display display :protocol protocol)
+    (init-display-top-half (open-display host :display display :protocol protocol))
     (load-rc)
-    (init-display (current-display))
+    (init-display-bottom-half (current-display))
     (setf *event-threads* (bordeaux-threads:make-thread #'event-processor :name "event-processor"))
     (setf *timer-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))))
 
