@@ -16,6 +16,12 @@
    (width :initarg :width
 	  :accessor width
 	  :initform nil)
+   (x :initarg :x
+      :accessor x
+      :initform 0)
+   (y :initarg :y
+      :accessor y
+      :initform 0)
    (message-gc :initarg :message-gc
 	       :accessor message-gc
 	       :initform nil)
@@ -159,6 +165,26 @@
     (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
       (and exist-p (xlib:window-equal xwin (xwindow win)) win))))
 
+(defun update-screen-window-geometry (window screen)
+  (let* ((xwindow (xwindow window))
+	 (old-x (xlib:drawable-x xwindow))
+	 (old-y (xlib:drawable-y xwindow))
+	 (old-width (xlib:drawable-width xwindow))
+	 (old-height (xlib:drawable-height xwindow))
+	 (new-x (max old-x (x screen)))
+	 (new-y (max old-y (y screen)))
+	 (new-width (min old-width (width screen)))
+	 (new-height (min old-height (height screen))))
+    (xlib:with-state (xwindow)
+      (setf (xlib:drawable-x xwindow) new-x
+	    (xlib:drawable-y xwindow) new-y
+	    (xlib:drawable-width xwindow) new-width
+	    (xlib:drawable-height xwindow) new-height))
+    (setf (orig-x window) (max new-x (orig-x window))
+	  (orig-y window) (max new-y (orig-y window))
+	  (orig-width window) (min new-width (orig-width window))
+	  (orig-height window) (min new-height (orig-height window)))))
+
 ;; this is lowerlevel function
 (defun manage-new-window (xwindow xparent screen)
   (multiple-value-bind (ignore-name wm-class) (xlib:get-wm-class xwindow)
@@ -169,11 +195,8 @@
 	   (pwin (xwindow-window xparent screen))) ;FIXME:what if we can not find the parent?
       (setf (parent win) pwin
 	    (wm-name win) (xlib:wm-name xwindow)
-	    (wm-class win) wm-class
-	    (orig-x win) (xlib:drawable-x xwindow)
-	    (orig-y win) (xlib:drawable-y xwindow)
-	    (orig-width win) (xlib:drawable-width xwindow)
-	    (orig-height win) (xlib:drawable-height xwindow))
+	    (wm-class win) wm-class)
+      (update-screen-window-geometry win screen)
       (add-window win (display screen))
       (add-window win screen))))
 
