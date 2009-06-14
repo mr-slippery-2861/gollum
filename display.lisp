@@ -133,22 +133,14 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 				 :xdisplay xdisplay
 				 :id id
 				 :current-keymap :top-map)))
-    (update-key-mod-map display)
-    (update-lock-type display)
-    (setf (xlib:display-error-handler xdisplay) *error-handlers*)
-    (add-keymap :top-map display)
-    (add-keymap :input-map display)
-    (add-keymap :root-map display)
-    (add-keymap :window-map display)
-    (setup-input-map display)
-    (setup-default-bindings display)
     (setf (gethash id *all-displays*) display
 	  *current-display* display)
     (dolist (xscreen (xlib:display-roots xdisplay))
       (add-screen-to-display xscreen (hash-table-count (screens display)) display)
       (if (eql xscreen (xlib:display-default-screen xdisplay))
 	  (setf (current-screen display) ;set current-screen to the default screen of the display
-		(gethash (1- (hash-table-count (screens display))) (screens display)))))))
+		(gethash (1- (hash-table-count (screens display))) (screens display)))))
+    display))
 
 (defun close-display (display)
   (let* ((xdisplay (xdisplay display))
@@ -157,7 +149,18 @@ example:(bind-key :top-map \"C-h\" :help-map)"
     (remhash id *all-displays*)
     (setf *current-display* nil)))
 
-(defun init-display (display)
+(defun init-display-top-half (display)
+  (update-key-mod-map display)
+  (update-lock-type display)
+  (setf (xlib:display-error-handler (xdisplay display)) *error-handlers*)
+  (add-keymap :top-map display)
+  (add-keymap :input-map display)
+  (add-keymap :root-map display)
+  (add-keymap :window-map display)
+  (setup-input-map display)
+  (setup-default-bindings display))
+
+(defun init-display-bottom-half (display)
   (maphash (lambda (id screen)
 	     (declare (ignore id))
 	     (init-screen screen)) (screens display)))
@@ -169,14 +172,15 @@ example:(bind-key :top-map \"C-h\" :help-map)"
   (let ((id (xlib:display-display xdisplay)))
     (gethash id *all-displays*)))
 
-(defmethod add-screen-to-display (xscreen id (d display))
-  (let ((s (make-instance 'screen
-			  :id id
-			  :xscreen xscreen
-			  :height (xlib:screen-height xscreen)
-			  :width (xlib:screen-width xscreen))))
-    (setf (gethash id (screens d)) s
-	  (display s) d)))
+(defmethod add-screen-to-display (xscreen id (display display))
+  (let ((screen (make-instance 'screen
+			       :id id
+			       :xscreen xscreen
+			       :height (xlib:screen-height xscreen)
+			       :width (xlib:screen-width xscreen))))
+    (setf (gethash id (screens display)) screen
+	  (display screen) display)
+    (manage-screen-root screen)))
 
 (defmethod xwindow-window (xwin (obj display))
   (when xwin
