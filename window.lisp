@@ -28,6 +28,9 @@
    (orig-height :initarg :orig-height
 		:accessor orig-height
 		:initform nil)
+   (size-state :initarg :size-state
+	       :accessor size-state
+	       :initform :normal)
    (title :initarg :title		;it's the title bar,as my plan,it can be a gtk window
 	  :accessor title
 	  :initform nil)
@@ -148,9 +151,15 @@
 	 (max-height (height screen))
 	 (xwindow (xwindow window)))
     (xlib:with-state (xwindow)
-      (setf (xlib:drawable-width xwindow) max-width
+      (setf (xlib:drawable-x xwindow) (x screen)
+	    (xlib:drawable-y xwindow) (y screen)
+	    (xlib:drawable-width xwindow) max-width
 	    (xlib:drawable-height xwindow) max-height))
+    (setf (size-state window) :maximized)
     (flush-display (display window))))
+
+(defun maximized (window)
+  (eql (size-state window) :maximized))
 
 (defun maximize ()
   (maximize-window (current-window nil)))
@@ -166,6 +175,7 @@
 	    (xlib:drawable-y xwindow) y
 	    (xlib:drawable-width xwindow) width
 	    (xlib:drawable-height xwindow) height))
+    (setf (size-state window) :normal)
     (flush-display (display window))))
 
 (defun restore ()
