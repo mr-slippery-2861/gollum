@@ -107,7 +107,7 @@
 	 (s (screen p)))
     (unless override-redirect-p
       (set-wm-state window 0)		;0 for withdrawn while 1 for normal
-      (and window (manage-new-window window parent s))))
+      (manage-new-window window parent s)))
   t)
 
 (define-event-handler :destroy-notify (window)
@@ -148,21 +148,31 @@
 
 (define-event-handler :configure-request (window x y width height border-width stack-mode above-sibling value-mask)
   (declare (ignore event-key send-event-p stack-mode above-sibling))
-  (let ((x-p (plusp (logand value-mask 1)))
-	(y-p (plusp (logand value-mask 2)))
-	(width-p (plusp (logand value-mask 4)))
-	(height-p (plusp (logand value-mask 8)))
-	(border-width-p (plusp (logand value-mask 16))))
+  (let* ((d (xdisplay-display display))
+	 (win (xwindow-window window d))
+	 (screen (screen win))
+	 (x-p (plusp (logand value-mask 1)))
+	 (y-p (plusp (logand value-mask 2)))
+	 (width-p (plusp (logand value-mask 4)))
+	 (height-p (plusp (logand value-mask 8)))
+;	 (border-width-p (plusp (logand value-mask 16)))
+	 (new-x (if x-p (max x (x screen)) (orig-x win)))
+	 (new-y (if y-p (max y (y screen)) (orig-y win)))
+	 (new-width (if width-p (min width (width screen)) (orig-width win)))
+	 (new-height (if height-p (min height (height screen)) (orig-height win))))
 ;	(stack-mode-p (plusp (logand value-mask 32)))
 ;	(above-sibling-p (plusp (logand value-mask 64))))
-    (xlib:with-state (window)		;FIXME:check the geometric first
-      (when x-p (setf (xlib:drawable-x window) x))
-      (when y-p (setf (xlib:drawable-y window) y))
-      (when width-p (setf (xlib:drawable-width window) width))
-      (when height-p (setf (xlib:drawable-height window) height))
-      (when border-width-p (setf (xlib:drawable-border-width window) border-width))
-      ))
-  (xlib:display-finish-output display)
+    (when (not (maximized win))
+	(xlib:with-state (window)		;FIXME:check the geometric first
+	  (if x-p (setf (xlib:drawable-x window) new-x))
+	  (if y-p (setf (xlib:drawable-y window) new-y))
+	  (if width-p (setf (xlib:drawable-width window) new-width))
+	  (if height-p (setf (xlib:drawable-height window) new-height)))
+	(xlib:display-finish-output display))
+    (setf (orig-x win) new-x
+	  (orig-y win) new-y
+	  (orig-width win) new-width
+	  (orig-height win) new-height))
   t)
 
 (defun withdrawn-to-mapped (window)
@@ -187,10 +197,17 @@
 
 (define-event-handler :resize-request (window width height)
   (declare (ignore event-key send-event-p))
-  (xlib:with-state (window)
-    (setf (xlib:drawable-width window) width
-	  (xlib:drawable-height window) height))
-  (xlib:display-finish-output display)
+  (let* ((d (xdisplay-display display))
+	 (win (xwindow-window window d))
+	 (screen (screen win))
+	 (actual-width (min (width screen) width))
+	 (actual-height (min (height screen) height)))
+    (xlib:with-state (window)
+      (setf (xlib:drawable-width window) actual-width
+	    (xlib:drawable-height window) actual-height))
+    (setf (orig-width win) actual-width
+	  (orig-height win) actual-height)
+    (xlib:display-finish-output display))
   t)
 
 (defun event-processor (&optional (display (current-display)))
