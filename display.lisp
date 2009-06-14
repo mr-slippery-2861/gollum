@@ -41,6 +41,8 @@
 	 :accessor font
 	 :initform nil)))
 
+(defgeneric input-focus (display))
+
 (defgeneric find-keymap (keymap d))
 
 (defgeneric add-keymap (keymap display))
@@ -52,6 +54,12 @@
 (defgeneric do-bind (key window display))
 
 (defgeneric add-screen-to-display (xscreen id d))
+
+(defmethod input-focus ((display display))
+  (let ((input-focus (xlib:input-focus (xdisplay display))))
+    (if (xlib:window-p input-focus)
+	(xwindow-window input-focus display)
+	input-focus)))
 
 (defmethod find-keymap (keymap (d display))
   (gethash keymap (keymaps d)))
