@@ -73,6 +73,8 @@
 
 (defgeneric make-internel-window (s))
 
+(defgeneric manage-screen-root (screen))
+
 (defgeneric manage-existing-windows (s))
 
 (defgeneric set-current-workspace (ws s)
@@ -175,24 +177,27 @@
       (add-window win (display screen))
       (add-window win screen))))
 
-(defmethod manage-existing-windows ((s screen))
-  (let* ((xroot (xlib:screen-root (xscreen s)))
-	 (window-list (xlib:query-tree xroot))
+(defmethod manage-screen-root ((screen screen))
+  (let* ((xroot (xlib:screen-root (xscreen screen)))
 	 (root-id (xlib:window-id xroot))
 	 (root (make-instance 'window
 			      :id root-id
 			      :xwindow xroot
-			      :screen s
-			      :display (display s)
+			      :screen screen
+			      :display (display screen)
 			      :map-state :viewable
 			      :ws-map-state :viewable)))
-    (setf (gethash root-id (windows s)) root	;manage the root window seperately
-	  (gethash root-id (windows (display s))) root
-	  (root s) root)
+    (setf (gethash root-id (windows screen)) root
+	  (gethash root-id (windows (display screen))) root
+	  (root screen) root)))
+
+(defmethod manage-existing-windows ((screen screen))
+  (let* ((xroot (xlib:screen-root (xscreen screen)))
+	 (window-list (xlib:query-tree xroot)))
     (dolist (win window-list)
       (unless (eql :on (xlib:window-override-redirect win))
 	(set-wm-state win (case (xlib:window-map-state win) (:unmapped 0) (:viewable 1)))
-	(manage-new-window win xroot s)))))
+	(manage-new-window win xroot screen)))))
 
 (defun calculate-geometry (screen xwindow gravity)
   (let* ((height (height screen))
