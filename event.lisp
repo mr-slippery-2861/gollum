@@ -48,6 +48,15 @@
 		(declare (ignore event-slots))
 		,@body))
        (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
+;; Input Focus Events
+
+(define-event-handler :focus-in (window mode kind)
+  (declare (ignore event-key send-event-p))
+  t)
+
+(define-event-handler :focus-out (window mode kind)
+  (declare (ignore event-key send-event-p))
+  t)
 
 ;; Keyboard and Pointer Events
 
@@ -186,13 +195,15 @@
   (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d))
-	 (ws (workspace w)))
-    (setf (ws-map-state w) :viewable)
-    (set-wm-state window 1)		;1 for normal
-    (withdrawn-to-mapped w)
-    (when (workspace-equal (current-workspace (current-screen d)) ws)
-      (map-workspace-window w)
-      (flush-display d)))
+	 (ws nil))
+    (when w
+      (setf ws (workspace w))
+      (setf (ws-map-state w) :viewable)
+      (set-wm-state window 1)		;1 for normal
+      (withdrawn-to-mapped w)
+      (when (workspace-equal (current-workspace (current-screen d)) ws)
+	(map-workspace-window w)
+	(flush-display d))))
   t)
 
 (define-event-handler :resize-request (window width height)
