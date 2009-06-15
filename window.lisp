@@ -18,10 +18,10 @@
 	    :initform nil)
    (orig-x :initarg :orig-x
 	   :accessor orig-x
-	   :initform nil)
+	   :initform 0)
    (orig-y :initarg :orig-y
 	   :accessor orig-y
-	   :initform nil)
+	   :initform 0)
    (orig-width :initarg :orig-width
 	       :accessor orig-width
 	       :initform nil)
@@ -70,6 +70,8 @@
 
 (defgeneric raise-window (win)
   (:documentation "put the window on top of other windows"))
+
+(defgeneric set-input-focus (window))
 
 (defgeneric match-window (win &key class name)
   (:documentation "return T if a window satisfies the description against match-type"))
@@ -132,8 +134,20 @@
   (xlib:with-state ((xwindow win))
     (setf (xlib:window-priority (xwindow win)) :top-if)))
 
-(defun kill-window (window xdisplay)
-  (xlib:kill-client xdisplay (xlib:window-id window)))
+(defmethod set-input-focus ((window window))
+  (xlib:set-input-focus (xdisplay (display window)) (xwindow window) :parent))
+
+(defun kill-window (window)
+  (let ((display (display window)))
+    (if (find :WM_DELETE_WINDOW (xlib:wm-protocols (xwindow window)))
+	(xlib:send-event (xwindow window) :client-message nil :window (xwindow window)
+			                                      :type :WM_PROTOCOLS
+							      :format 32
+							      :data (list (xlib:intern-atom (xdisplay display) :WM_DELETE_WINDOW)))
+	(xlib:kill-client (xdisplay display) (id window)))))
+
+(defun kill ()
+  (kill-window (current-window nil)))
 
 (defmethod match-window ((win window) &key class name)
   (and
