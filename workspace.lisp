@@ -108,7 +108,8 @@
 	    (next (cadr windows)))
 	(setf (mapped-windows workspace) (append (cdr windows) (list current))
 	      (current-window workspace) next)
-	(raise-window next)))))
+	(raise-window next)
+	(set-input-focus next)))))
 
 (defun next-window ()
   (workspace-next-window (current-workspace nil)))
@@ -119,7 +120,8 @@
       (let ((prev (car (last windows))))
 	(setf (mapped-windows workspace) (list* prev (butlast windows))
 	      (current-window workspace) prev)
-	(raise-window prev)))))
+	(raise-window prev)
+	(set-input-focus prev)))))
 
 (defun prev-window ()
   (workspace-prev-window (current-workspace nil)))
