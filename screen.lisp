@@ -104,6 +104,8 @@
 
 (defgeneric add-workspaces-according-to-layout (screen))
 
+(defgeneric list-workspaces (screen))
+
 (defgeneric init-screen (screen))
 
 (defmethod make-internel-window ((s screen))
@@ -191,14 +193,16 @@
     (declare (ignore ignore-name))
     (let* ((map-state (xlib:window-map-state xwindow))
 	   (id (xlib:window-id xwindow))
-	   (win (make-instance 'window :id id :xwindow xwindow :map-state map-state :ws-map-state map-state))
+	   (win (make-instance 'window :id id :xwindow xwindow :map-state map-state :ws-map-state map-state
+			       :orig-width (width screen) :orig-height (height screen)))
 	   (pwin (xwindow-window xparent screen))) ;FIXME:what if we can not find the parent?
+      (setf (xlib:window-event-mask xwindow) '(:focus-change :substructure-notify :substructure-redirect))
       (setf (parent win) pwin
 	    (wm-name win) (xlib:wm-name xwindow)
 	    (wm-class win) wm-class)
-      (update-screen-window-geometry win screen)
       (add-window win (display screen))
-      (add-window win screen))))
+      (add-window win screen)
+      (update-screen-window-geometry win screen))))
 
 (defmethod manage-screen-root ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
@@ -212,7 +216,10 @@
 			      :ws-map-state :viewable)))
     (setf (gethash root-id (windows screen)) root
 	  (gethash root-id (windows (display screen))) root
-	  (root screen) root)))
+	  (root screen) root
+	  (xlib:window-event-mask (xwindow (root screen))) '(:focus-change
+							     :substructure-notify
+							     :substructure-redirect))))
 
 (defmethod manage-existing-windows ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
@@ -239,6 +246,8 @@
 	(add-workspace-to-screen name screen))
       (add-workspace-to-screen "default" screen)))
 
+(defmethod list-workspaces ((screen screen))
+  )
 (defun create-gcontext (xwin bg fg font)
   (xlib:create-gcontext :drawable xwin
 			:background bg
@@ -248,9 +257,7 @@
 (defmethod init-screen ((screen screen))
   (add-workspaces-according-to-layout screen)
   (manage-existing-windows screen)
-  (setf (xlib:window-event-mask (xwindow (root screen))) '(:substructure-notify
-							   :substructure-redirect)
-	(message-font screen) (open-font (display screen) *output-font*)
+  (setf (message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internel-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
 	(xlib:window-border (message-window screen)) (alloc-color *internal-window-border* screen)
@@ -269,7 +276,3 @@
 					   (alloc-color *background-color* screen)
 					   (alloc-color *foreground-color* screen)
 					   (input-font screen))))
-
-
-  
-
