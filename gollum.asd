@@ -25,7 +25,7 @@
 	       (:file "screen")
 	       (:file "error")
 	       (:file "display")
-	       (:file "message")
+	       (:file "output")
 	       (:file "input")
 	       (:file "event")
 	       (:file "gollum")
