@@ -96,6 +96,8 @@
 
 (defgeneric ungrab-keyboard (display &key time))
 
+(defgeneric print-obj (obj))
+
 (defun mapped (window)
   (eql (map-state window) :viewable))
 
@@ -147,7 +149,8 @@
 	(xlib:kill-client (xdisplay display) (id window)))))
 
 (defun kill ()
-  (kill-window (current-window nil)))
+  (if (current-window nil)
+      (kill-window (current-window nil))))
 
 (defmethod match-window ((win window) &key class name)
   (and
@@ -209,3 +212,4 @@
 
 (defun set-wm-state (xwindow state)
   (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
+
