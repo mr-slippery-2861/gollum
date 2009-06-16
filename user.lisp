@@ -28,3 +28,12 @@
   (let ((user-rc (probe-file (merge-pathnames (user-homedir-pathname) #p".gollumrc"))))
     (if user-rc
 	(load user-rc))))
+
+(defun go-to-workspace (ws)
+  (let* ((screen (current-screen nil))
+	 (workspace (find-workspace ws (workspaces screen))))
+    (when workspace
+      (switch-to-workspace workspace screen)
+      (message "~a" (name workspace)))
+    (unless workspace
+      (message "workspace ~a does not exist." ws))))
