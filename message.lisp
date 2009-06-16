@@ -12,14 +12,13 @@
 	(done nil)
 	(last-token nil))
     (loop until done
-	 (let ((caret (position #\^ raw-string :start start))
-	   (cond
+	 (let ((caret (position #\^ raw-string :start start)))
+	   (cond 
 	     ((null caret) (setf done t))
 	     ((char= (elt raw-string (1+ caret)) #\^) (setf raw-string (remove #\^ raw-string :count 1)
 							    start (1+ caret)))
-	     ((digit-char-p (elt raw-string (1+ caret))) )
-	     (progn
-	       ))
+	     ((digit-char-p (elt raw-string (1+ caret))) ))))))
+
 (defmethod screen-message ((screen screen) message &optional (time-out-p t))
   (let* ((font (message-font screen))
 	 (message-window (message-window screen))
