@@ -116,10 +116,12 @@
 (defmethod set-current-workspace ((ws workspace) (s screen))
   (setf (current-workspace s) ws))
 
-(defmethod switch-to-workspace ((ws workspace) (s screen))
-  (unmap-workspace (current-workspace s))
-  (map-workspace ws)
-  (set-current-workspace ws s))
+(defmethod switch-to-workspace ((workspace workspace) (screen screen))
+  (unless (workspace-equal (current-workspace screen) workspace)
+    (unmap-workspace (current-workspace screen))
+    (map-workspace workspace)
+    (set-current-workspace workspace screen)
+    (flush-display (display screen))))
 
 (defmethod raise-workspace-window ((win window) (s screen))
   (let ((ws (workspace win)))
@@ -142,14 +144,12 @@
       (when exist-p
 	(remhash id (windows obj))))))
 
-(defmethod add-workspace-to-screen (name (s screen))
-  (or (find-workspace-by-name name (workspaces s))
-      (let* ((new-id (next-workspace-id (workspaces s)))
-	     (w (make-instance 'workspace :name name :id new-id)))
-	(setf (gethash new-id (workspaces s)) w
-	      (screen w) s)
-	(unless (current-workspace s)
-	  (setf (current-workspace s) w)))))
+(defmethod add-workspace-to-screen (name (screen screen))
+  (or (find-workspace-by-name name (workspaces screen))
+      (let* ((new-id (next-workspace-id (workspaces screen)))
+	     (workspace (make-instance 'workspace :name name :id new-id)))
+	(setf (gethash new-id (workspaces screen)) workspace
+	      (screen workspace) screen))))
 
 ;; need to process all the windows in workspace
 (defmethod delete-workspace-from-screen ((ws workspace) (s screen))
@@ -213,7 +213,9 @@
 			      :screen screen
 			      :display (display screen)
 			      :map-state :viewable
-			      :ws-map-state :viewable)))
+			      :ws-map-state :viewable
+			      :wm-name "ROOT"
+			      :wm-class "ROOT")))
     (setf (gethash root-id (windows screen)) root
 	  (gethash root-id (windows (display screen))) root
 	  (root screen) root
@@ -240,14 +242,38 @@
       (:center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width) 2))
 		     (xlib:drawable-y xwindow) (floor (/ (- height window-height) 2)))))))
 
+(defun setup-window-for-drawing-glyphs (screen xwindow gravity gcontext font content)
+  (let* ((height (+ (xlib:font-descent font) (xlib:font-ascent font)))
+	 (width (xlib:text-width font content)))
+    (xlib:with-state (xwindow)
+      (if (eql (xlib:window-map-state xwindow) :unmapped)
+	  (xlib:map-window xwindow))
+      (setf (xlib:drawable-height xwindow) (+ (* 2 *internal-window-vertical-padding*) height)
+	    (xlib:drawable-width xwindow) (+ (* 2 *internal-window-horizontal-padding*) width)
+	    (xlib:window-priority xwindow) :top-if)
+      (calculate-geometry screen xwindow gravity))
+    (xlib:with-gcontext (gcontext :foreground (xlib:gcontext-background gcontext))
+      (xlib:draw-rectangle xwindow gcontext 0 0 (xlib:drawable-width xwindow) (xlib:drawable-height xwindow) t))))
+
 (defmethod add-workspaces-according-to-layout ((screen screen))
   (if *workspace-layout*
       (dolist (name *workspace-layout*)
 	(add-workspace-to-screen name screen))
       (add-workspace-to-screen "default" screen)))
 
+(defmethod list-windows ((obj screen))
+  (let ((windows nil))
+    (maphash (lambda (id window)
+	       (declare (ignore id))
+	       (setf windows (append windows (list window)))) (windows obj))
+    windows))
+
 (defmethod list-workspaces ((screen screen))
-  )
+  (let ((workspaces nil))
+    (maphash (lambda (id workspace)
+	       (setf workspaces (append workspaces (list (list id workspace))))) (workspaces screen))
+    workspaces))
+
 (defun create-gcontext (xwin bg fg font)
   (xlib:create-gcontext :drawable xwin
 			:background bg
@@ -257,6 +283,7 @@
 (defmethod init-screen ((screen screen))
   (add-workspaces-according-to-layout screen)
   (manage-existing-windows screen)
+  (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
   (setf (message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internel-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
