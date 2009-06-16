@@ -7,17 +7,27 @@
   (flush-display (display screen)))
 
 (defun filt-color-controling (string)
-  (let ((raw-string string)
-	(start 0)
-	(done nil)
-	(last-token nil))
-    (loop until done
-	 (let ((caret (position #\^ raw-string :start start)))
-	   (cond 
-	     ((null caret) (setf done t))
-	     ((char= (elt raw-string (1+ caret)) #\^) (setf raw-string (remove #\^ raw-string :count 1)
-							    start (1+ caret)))
-	     ((digit-char-p (elt raw-string (1+ caret))) ))))))
+  (let ((raw-string nil)
+	(caret -3)
+	(current 0))
+    (loop for x across string
+	 do (progn
+	      (cond
+		((char= x #\^)
+		 (if (= (- current caret) 1)
+		     (setf raw-string (concat raw-string (string x)))
+		     (setf caret current)))
+		((> (- current caret) 2)
+		 (setf raw-string (concat raw-string (string x))))
+		((= (- current caret) 2)
+		 (unless (or (digit-char-p x) (char= x #\*))
+		   (setf raw-string (concat raw-string (string x)))))
+		((= (- current caret) 1)
+		 (unless (digit-char-p x)
+		   (setf caret -3))))
+	      (setf current (1+ current))))
+    raw-string))
+
 
 (defmethod screen-message ((screen screen) message &optional (time-out-p t))
   (let* ((font (message-font screen))
