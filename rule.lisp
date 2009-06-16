@@ -29,7 +29,7 @@
 (defun add-rule (rule)
   (push rule *all-rules*))
 
-(defun defrule (rules)
+(defun defrules (rules)
   (dolist (rule rules)
     (add-rule rule)))
 
