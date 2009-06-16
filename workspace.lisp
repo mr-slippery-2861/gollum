@@ -40,6 +40,8 @@
 (defgeneric list-workspace-windows (ws &key name class)
   (:documentation "list the windows of the workspace"))
 
+(defgeneric list-windows (obj))
+
 (defgeneric workspace-next-window (workspace))
 
 (defgeneric workspace-prev-window (workspace))
@@ -72,8 +74,10 @@
   (case (get-wm-state win)
     (0 (push win (withdrawn-windows obj)))
     (1 (push win (mapped-windows obj)))) ;FIXME:which position to put
-  (when (workspace-equal obj (current-workspace (screen win)))
-    (map-workspace-window win)))
+  (unless (workspace-equal obj (current-workspace (screen win)))
+    (unmap-workspace-window win))
+  (if (null (current-window obj))
+      (setf (current-window obj) win)))
 
 (defmethod delete-window ((win window) (obj workspace))
   (setf (workspace win) nil)
@@ -88,15 +92,21 @@
     (delete-window win source)
     (add-window win dest)))
 
-(defmethod map-workspace ((ws workspace))
-  (mapc #'map-workspace-window (windows ws)))
+(defmethod map-workspace ((workspace workspace))
+  (mapc #'map-workspace-window (mapped-windows workspace))
+  (when (current-window workspace)
+    (raise-window (current-window workspace))
+    (set-input-focus (current-window workspace))))
 
-(defmethod unmap-workspace ((ws workspace))
-  (mapc #'unmap-workspace-window (windows ws)))
+(defmethod unmap-workspace ((workspace workspace))
+  (mapc #'unmap-workspace-window (mapped-windows workspace)))
 
 (defmethod list-workspace-windows ((ws workspace) &key (name t) class)
   (let ((windows-list (mapped-windows ws)))
     (mapcar (lambda (win) (list (and name (wm-name win)) (and class (wm-class win)))) windows-list)))
+
+(defmethod list-windows ((obj workspace))
+  (mapped-windows obj))
 
 (defmethod current-window ((obj null))
   (current-window (current-workspace nil)))
