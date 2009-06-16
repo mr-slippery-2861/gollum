@@ -282,8 +282,8 @@
 
 (defmethod init-screen ((screen screen))
   (add-workspaces-according-to-layout screen)
-  (manage-existing-windows screen)
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
+  (manage-existing-windows screen)
   (setf (message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internel-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
