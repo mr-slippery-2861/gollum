@@ -22,6 +22,9 @@
    (y :initarg :y
       :accessor y
       :initform 0)
+   (mode-line :initarg :mode-line
+	      :accessor mode-line
+	      :initform nil)
    (message-gc :initarg :message-gc
 	       :accessor message-gc
 	       :initform nil)
@@ -77,7 +80,7 @@
 (defvar *internal-window-vertical-padding* 1)
 (defvar *internal-window-horizontal-padding* 2)
 
-(defgeneric make-internel-window (s))
+(defgeneric make-internal-window (s))
 
 (defgeneric manage-screen-root (screen))
 
@@ -108,7 +111,7 @@
 
 (defgeneric init-screen (screen))
 
-(defmethod make-internel-window ((s screen))
+(defmethod make-internal-window ((s screen))
   (xlib:create-window :parent (xwindow (root s))
 		      :x 0 :y 0 :width 1 :height 1
 		      :override-redirect :on))
@@ -280,12 +283,14 @@
 			:foreground fg
 			:font font))
 
+;; we are in bottom-half,i.e. after the rc file loaded
 (defmethod init-screen ((screen screen))
   (add-workspaces-according-to-layout screen)
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
   (manage-existing-windows screen)
-  (setf (message-font screen) (open-font (display screen) *output-font*)
-	(message-window screen) (make-internel-window screen)
+  (setf (mode-line screen) (make-internal-window screen)
+	(message-font screen) (open-font (display screenm) *output-font*)
+	(message-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
 	(xlib:window-border (message-window screen)) (alloc-color *internal-window-border* screen)
 	(message-gc screen) (create-gcontext (message-window screen)
@@ -296,7 +301,7 @@
 					      :action #'hide-screen-message
 					      :screen screen)
 	(input-font screen) (open-font (display screen) *input-font*)
-	(input-window screen) (make-internel-window screen)
+	(input-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (input-window screen)) *internal-window-border-width*
 	(xlib:window-border (input-window screen)) (alloc-color *internal-window-border* screen)
 	(input-gc screen) (create-gcontext (input-window screen)
