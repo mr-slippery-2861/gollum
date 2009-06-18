@@ -1,7 +1,7 @@
 (in-package :gollum)
 
 (defun key->mod (key key-mod-map)
-  (cadr (assoc key key-mod-map)))
+  (cdr (assoc key key-mod-map)))
 
 (defun update-lock-type (display)
   (setf (lock-type display) (if (find "Caps_Lock" (second (mod-key-map display)) :test #'string=)
@@ -46,16 +46,16 @@
   (let ((fn-name (gensym)))
     `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
 		(declare (ignore event-slots))
-		,@body))
+		(handler-case (progn ,@body)
+		  (no-such-window () t))))
+;		,@body))
        (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
 ;; Input Focus Events
 
 (define-event-handler :focus-in (window mode kind)
-  (declare (ignore event-key send-event-p))
   t)
 
 (define-event-handler :focus-out (window mode kind)
-  (declare (ignore event-key send-event-p))
   t)
 
 ;; Keyboard and Pointer Events
@@ -74,7 +74,6 @@
     (apply #'xlib:make-state-mask mods)))
 
 (define-event-handler :key-press (code state window)
-  (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (keysym (code-state->keysym code state d))
 	 (key (key->hash (filt-state state) keysym))) ;FIME:we simply filt :shift out
@@ -83,13 +82,11 @@
     t))
 
 (define-event-handler :key-release ()
-  (declare (ignore display event-key send-event-p))
   t)
 
 ;; Keyboard and Pointer State Events
 
 (define-event-handler :mapping-notify (request)
-  (declare (ignore event-key send-event-p))
   (let ((d (xdisplay-display display)))
     (case request
       (:modifier (progn
@@ -102,15 +99,12 @@
 
 ;; Window State Events
 (define-event-handler :circulate-notify ()
-  (declare (ignore display event-key send-event-p))
   t)
 
 (define-event-handler :configure-notify ()
-  (declare (ignore display event-key send-event-p))
   t)
 
 (define-event-handler :create-notify (window parent override-redirect-p)
-  (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (p (xwindow-window parent d))
 	 (s (screen p)))
@@ -120,7 +114,6 @@
   t)
 
 (define-event-handler :destroy-notify (window)
-  (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d)))
     (message "destroy-notify received,id:~a" (xlib:window-id window))
@@ -129,34 +122,28 @@
   t)
 
 (define-event-handler :gravity-notify ()
-  (declare (ignore display event-key send-event-p))
   t)
 
 (define-event-handler :map-notify (window override-redirect-p)
-  (declare (ignore display event-key send-event-p))
   (unless override-redirect-p
     (message "map-notify received,window ~a" (xlib:get-wm-class window)))
   t)
 
 (define-event-handler :reparent-notify (window parent override-redirect-p)
-  (declare (ignore display event-key send-event-p))
   (message "window ~a reparented to its new parent ~a" (xlib:get-wm-class window) (xlib:get-wm-class parent))
   t)
 
 (define-event-handler :unmap-notify ()
-  (declare (ignore display event-key send-event-p))
   t)
 
 ;; Structure Control Events
 
 (define-event-handler :circulate-request (window place)
-  (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d)))
     t))
 
 (define-event-handler :configure-request (window x y width height border-width stack-mode above-sibling value-mask)
-  (declare (ignore event-key send-event-p stack-mode above-sibling))
   (let* ((d (xdisplay-display display))
 	 (win (xwindow-window window d))
 	 (screen (screen win))
@@ -192,7 +179,6 @@
 	  (mapped-windows workspace) (list* window mapped)))) ;FIXME:which position to put
 
 (define-event-handler :map-request (window)
-  (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d))
 	 (ws nil))
@@ -207,7 +193,6 @@
   t)
 
 (define-event-handler :resize-request (window width height)
-  (declare (ignore event-key send-event-p))
   (let* ((d (xdisplay-display display))
 	 (win (xwindow-window window d))
 	 (screen (screen win))

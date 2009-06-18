@@ -1,5 +1,8 @@
 (in-package :gollum)
 
+
+;; clx error handling
+
   ;; *xerror-vector*
   ;;    unknown-error
   ;;    request-error                              ; 1  bad request code
@@ -33,3 +36,9 @@
 ;; access-error alloc-error atom-error closed-display colormap-error connection-failure cursor-error device-busy drawable-error font-error gcontext-error id-choice-error implementation-error length-error lookup-error match-error missing-parameter name-error pixmap-error reply-length-error reply-timeout request-error resource-error sequence-error server-disconnect unexpected-reply unknown-error value-error window-error
 (define-error-handler 'xlib:window-error (resource-id)
   nil)
+
+;; gollum error handling
+
+(define-condition no-such-window (error)
+  ((xwindow :initarg :xwindow
+	    :reader xwindow)))

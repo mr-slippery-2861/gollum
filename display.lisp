@@ -100,29 +100,61 @@ example:(bind-key :top-map \"C-h\" :help-map)"
     (undefined-function () nil)
     (type-error () nil)))
 
-(defmethod do-bind (key xwindow (display display))
-  (when (eql (current-keymap display) :top-map)
-    (let ((grab-state nil))
-      (setf grab-state (grab-keyboard (root (current-screen display)) :owner-p nil :sync-pointer-p nil :sync-keyboard-p nil))))
-  (multiple-value-bind (action exist-p) (gethash key (find-keymap (current-keymap display) display))
-    (if exist-p
-	(let ((args (if (listp action) (cdr action) nil))
-	      (action (if (listp action) (car action) action)))
-	  (cond
-	    ((command-p action) (progn	;if action is a command,we run it,and restore the keymap state
-				  (run-command action)
-				  (xlib:ungrab-keyboard (xdisplay display))
-				  (setf (current-keymap display) :top-map)))
-	    ((symbol->function action) (progn	;if it's a function,we call it
-					 (apply (symbol-function action) args)
-					 (unless (eql (current-keymap display) :input-map)
-					   (xlib:ungrab-keyboard (xdisplay display))
-					   (setf (current-keymap display) :top-map))))
-	    ((keywordp action) (setf (current-keymap display) action)))) ;else,we asume it a keymap,so set the keymap state
-	(progn				      ;there is no action corresponding the key
-	  (setf (current-keymap display) :top-map)
-	  (xlib:ungrab-keyboard (xdisplay display))
-	  (screen-message (current-screen display) (format nil "no action bind,I'm ~a,event is ~a" (bordeaux-threads:thread-name (bordeaux-threads:current-thread)) key))))))
+(defun key->key-desc (display key)
+  (labels ((mod->abbr (mod)
+	     (case mod
+	       (:control "C-")
+	       (:alt "A-")
+	       (:meta "M-")
+	       (:super "S-")
+	       (:hyper "H-")
+	       (t nil))))
+    (multiple-value-bind (state keysym) (hash->key key)
+      (let ((mods (xlib:make-state-keys state))
+	    (key-char (keysym->keysym-name keysym))
+	    (result nil))
+	(mapc (lambda (mod)
+		(setf result (concat result (mod->abbr (if (find mod '(:mod-1 :mod-2 :mod-3 :mod-4 :mod-5))
+							   (car (rassoc mod (key-mod-map display)))
+							   mod))))) mods)
+	(concat result (string key-char))))))
+
+(let ((key-desc "-"))
+  (defmethod do-bind (key xwindow (display display))
+    (when (eql (current-keymap display) :top-map)
+      (let ((grab-state nil))
+	(setf grab-state (grab-keyboard (root (current-screen display)) :owner-p nil :sync-pointer-p nil :sync-keyboard-p nil))))
+    (multiple-value-bind (action exist-p) (gethash key (find-keymap (current-keymap display) display))
+      (if exist-p
+	  (let ((args (if (listp action) (cdr action) nil))
+		(action (if (listp action) (car action) action))
+		(current-key-desc (key->key-desc display key)))
+	    (cond
+	      ((command-p action) (progn	;if action is a command,we run it,and restore the keymap state
+				    (run-command action)
+				    (xlib:ungrab-keyboard (xdisplay display))
+				    (setf (current-keymap display) :top-map
+					  key-desc "-")
+				    (screen-message (current-screen display) (string action))))
+	      ((symbol->function action) (progn	;if it's a function,we call it
+					   (apply (symbol-function action) args)
+					   (unless (eql (current-keymap display) :input-map)
+					     (xlib:ungrab-keyboard (xdisplay display))
+					     (setf (current-keymap display) :top-map)
+					     (screen-message (current-screen display) (string action)))
+					   (setf key-desc "-")))
+	      ((keywordp action) (setf (current-keymap display) action
+				       key-desc (concat
+						 (subseq key-desc 0 (1- (length key-desc)))
+						 " "
+						 current-key-desc
+						 "-"))
+	       (screen-message (current-screen display) key-desc nil)))) ;else,we asume it a keymap,so set the keymap state
+	  (progn				      ;there is no action corresponding the key
+	    (setf (current-keymap display) :top-map
+		  key-desc "-")
+	    (xlib:ungrab-keyboard (xdisplay display))
+	    (screen-message (current-screen display) (format nil "no action bind,I'm ~a,event is ~a" (bordeaux-threads:thread-name (bordeaux-threads:current-thread)) key)))))))
 
 (defun update-key-mod-map (display)
   (multiple-value-bind (map mods mod-keycodes) (make-key-mod-map (xdisplay display))
@@ -191,9 +223,10 @@ example:(bind-key :top-map \"C-h\" :help-map)"
     (manage-screen-root screen)))
 
 (defmethod xwindow-window (xwin (obj display))
-  (when xwin
-    (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
-      (and exist-p (xlib:window-equal xwin (xwindow win)) win))))
+  (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
+    (if (and exist-p (xlib:window-equal xwin (xwindow win)))
+	win
+	(error 'no-such-window :xwindow xwin))))
 
 (defmethod add-window ((win window) (obj display))
   (setf (gethash (id win) (windows obj)) win
