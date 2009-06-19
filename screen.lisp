@@ -200,6 +200,11 @@
 			       :orig-width (width screen) :orig-height (height screen)))
 	   (pwin (xwindow-window xparent screen))) ;FIXME:what if we can not find the parent?
       (setf (xlib:window-event-mask xwindow) '(:focus-change :substructure-notify :substructure-redirect))
+      (unless (or (eql (xlib:window-class xwindow) :input-only) (not (window-equal pwin (root screen))))
+	(setf (xlib:window-border xwindow) (alloc-color *default-window-border* screen)
+	      (xlib:drawable-border-width xwindow) *default-window-border-width*))
+      (if (window-equal pwin (root screen))
+	  (setf (toplevel-p win) t))
       (setf (parent win) pwin
 	    (wm-name win) (xlib:wm-name xwindow)
 	    (wm-class win) wm-class)
@@ -289,7 +294,7 @@
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
   (manage-existing-windows screen)
   (setf (mode-line screen) (make-internal-window screen)
-	(message-font screen) (open-font (display screenm) *output-font*)
+	(message-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
 	(xlib:window-border (message-window screen)) (alloc-color *internal-window-border* screen)
