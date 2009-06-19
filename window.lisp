@@ -43,6 +43,9 @@
    (group :initarg :group		;this is not the same as group in stumpwm at all!more like in starcraft
 	  :accessor group
 	  :initform nil)
+   (toplevel-p :initarg :toplevel-p
+	       :accessor toplevel-p
+	       :initform nil)
    (parent :initarg :parent
 	   :accessor parent
 	   :initform nil)
@@ -213,3 +216,9 @@
 (defun set-wm-state (xwindow state)
   (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
 
+(defun translate-coordinates (src src-x src-y dst)
+  (xlib:translate-coordinates (xwindow src) src-x src-y (xwindow dst)))
+
+(defvar *default-window-border* "green")
+
+(defvar *default-window-border-width* 2)
