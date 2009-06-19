@@ -48,11 +48,38 @@
 		(declare (ignore event-slots))
 		(handler-case (progn ,@body)
 		  (no-such-window () t))))
-;		,@body))
        (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
+
+(defmacro define-event-handler-2 ((event-key restart &rest actual-keys) &body body)
+  (let ((fn-name (gensym)))
+    `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
+		(declare (ignore event-slots))
+		(handler-bind ((no-such-window (lambda (c)
+						 ,(if restart
+						      `(invoke-restart 'copy-superior window)
+						      `(invoke-restart 'ignore-window)))))
+		  (restart-case (progn ,@body)
+		    ,(if restart
+			 `(copy-superior (xwindow)
+					 (,restart xwindow))
+			 `(ignore-window () t))))))
+       (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
+
 ;; Input Focus Events
 
+(defun find-toplevel (window)
+  (if (or (window-equal window (root (screen window))) (toplevel-p window))
+      window
+      (find-toplevel (parent window))))
+
 (define-event-handler :focus-in (window mode kind)
+  (unless (find kind '(:pointer :virtual :nonlinear-virtual))
+    (let* ((d (xdisplay-display display))
+	   (win (xwindow-window window d))
+	   (top (find-toplevel win))
+	   (screen (screen top))
+	   (workspace (current-workspace screen)))
+      (setf (current-window workspace) top)))
   t)
 
 (define-event-handler :focus-out (window mode kind)
@@ -146,29 +173,31 @@
 (define-event-handler :configure-request (window x y width height border-width stack-mode above-sibling value-mask)
   (let* ((d (xdisplay-display display))
 	 (win (xwindow-window window d))
-	 (screen (screen win))
-	 (x-p (plusp (logand value-mask 1)))
-	 (y-p (plusp (logand value-mask 2)))
-	 (width-p (plusp (logand value-mask 4)))
-	 (height-p (plusp (logand value-mask 8)))
+	 (parent (parent win))
+	 (screen (screen win)))
+    (multiple-value-bind (root-x root-y dst-child) (translate-coordinates parent x y (root screen))
+      (let* ((x-p (plusp (logand value-mask 1)))
+	     (y-p (plusp (logand value-mask 2)))
+	     (width-p (plusp (logand value-mask 4)))
+	     (height-p (plusp (logand value-mask 8)))
 ;	 (border-width-p (plusp (logand value-mask 16)))
-	 (new-x (if x-p (max x (x screen)) (orig-x win)))
-	 (new-y (if y-p (max y (y screen)) (orig-y win)))
-	 (new-width (if width-p (min width (width screen)) (orig-width win)))
-	 (new-height (if height-p (min height (height screen)) (orig-height win))))
+	     (new-x (if x-p (max root-x (x screen)) (orig-x win)))
+	     (new-y (if y-p (max root-y (y screen)) (orig-y win)))
+	     (new-width (if width-p (min width (width screen)) (orig-width win)))
+	     (new-height (if height-p (min height (height screen)) (orig-height win))))
 ;	(stack-mode-p (plusp (logand value-mask 32)))
 ;	(above-sibling-p (plusp (logand value-mask 64))))
-    (when (not (maximized win))
-	(xlib:with-state (window)		;FIXME:check the geometric first
-	  (if x-p (setf (xlib:drawable-x window) new-x))
-	  (if y-p (setf (xlib:drawable-y window) new-y))
-	  (if width-p (setf (xlib:drawable-width window) new-width))
-	  (if height-p (setf (xlib:drawable-height window) new-height)))
-	(xlib:display-finish-output display))
-    (setf (orig-x win) new-x
-	  (orig-y win) new-y
-	  (orig-width win) new-width
-	  (orig-height win) new-height))
+	(when (not (maximized win))
+	  (xlib:with-state (window)		;FIXME:check the geometric first
+	    (if x-p (setf (xlib:drawable-x window) new-x))
+	    (if y-p (setf (xlib:drawable-y window) new-y))
+	    (if width-p (setf (xlib:drawable-width window) new-width))
+	    (if height-p (setf (xlib:drawable-height window) new-height)))
+	  (xlib:display-finish-output display))
+	(setf (orig-x win) new-x
+	      (orig-y win) new-y
+	      (orig-width win) new-width
+	      (orig-height win) new-height))))
   t)
 
 (defun withdrawn-to-mapped (window)
@@ -181,16 +210,29 @@
 (define-event-handler :map-request (window)
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d))
-	 (ws nil))
-    (when w
-      (setf ws (workspace w))
-      (setf (ws-map-state w) :viewable)
-      (set-wm-state window 1)		;1 for normal
-      (withdrawn-to-mapped w)
-      (when (workspace-equal (current-workspace (current-screen d)) ws)
-	(map-workspace-window w)
-	(flush-display d))))
+	 (ws (workspace w)))
+    (if (toplevel-p w)
+	(progn
+	  (setf (ws-map-state w) :viewable)
+	  (set-wm-state window 1)		;1 for normal
+	  (withdrawn-to-mapped w)
+	  (when (workspace-equal (current-workspace (current-screen d)) ws)
+	    (map-workspace-window w)))
+	(map-window w))
+    (flush-display d))
   t)
+
+(macroexpand-1 '(define-event-handler-2 (:map-request 'recover)
+  (let* ((d (xdisplay-display display))
+	 (w (xwindow-window window d))
+	 (ws (workspace w)))
+    (setf (ws-map-state w) :viewable)
+    (set-wm-state window 1)
+    (withdrawn-to-mapped w)
+    (when (workspace-equal (current-workspace (current-screen d)) ws)
+      (map-workspace-window w)
+      (flush-display d)))
+  t))
 
 (define-event-handler :resize-request (window width height)
   (let* ((d (xdisplay-display display))
