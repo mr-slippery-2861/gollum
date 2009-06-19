@@ -144,17 +144,21 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 					     (screen-message (current-screen display) (string action)))
 					   (setf key-desc "-")))
 	      ((keywordp action) (setf (current-keymap display) action
-				       key-desc (concat
-						 (subseq key-desc 0 (1- (length key-desc)))
-						 " "
-						 current-key-desc
-						 "-"))
+				       key-desc (string-trim " " (concat
+								  (subseq key-desc 0 (1- (length key-desc)))
+								  " "
+								  current-key-desc
+								  "-")))
 	       (screen-message (current-screen display) key-desc nil)))) ;else,we asume it a keymap,so set the keymap state
 	  (progn				      ;there is no action corresponding the key
+	    (screen-message (current-screen display) (string-trim " " (concat
+								       (subseq key-desc 0 (1- (length key-desc)))
+								       " "
+								       (key->key-desc display key)
+								       " not binded")))
 	    (setf (current-keymap display) :top-map
 		  key-desc "-")
-	    (xlib:ungrab-keyboard (xdisplay display))
-	    (screen-message (current-screen display) (format nil "no action bind,I'm ~a,event is ~a" (bordeaux-threads:thread-name (bordeaux-threads:current-thread)) key)))))))
+	    (xlib:ungrab-keyboard (xdisplay display)))))))
 
 (defun update-key-mod-map (display)
   (multiple-value-bind (map mods mod-keycodes) (make-key-mod-map (xdisplay display))
