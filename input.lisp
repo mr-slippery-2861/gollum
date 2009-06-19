@@ -84,3 +84,4 @@
   `(bordeaux-threads:make-thread (lambda ()
 				   (let ((,input (screen-input ,screen ,prompt)))
 				     ,@body)) :name "input-thread"))
+
