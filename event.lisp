@@ -113,8 +113,8 @@
   t)
 
 (define-event-handler :motion-notify (state window x y root-x root-y)
-  (let ((d (xdisplay-display display))
-	(win (xwindow-window window d)))
+  (let* ((d (xdisplay-display display))
+	 (win (xwindow-window window d)))
     (dformat 1 "motion-notify, window ~a x ~a y ~a root-x ~a root-y ~a" (wm-name win) x y root-x root-y)))
 
 (define-event-handler :enter-notify (window mode kind)
