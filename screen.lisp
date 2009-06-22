@@ -55,6 +55,9 @@
    (input-cv :initarg :input-cv
 	     :accessor input-cv
 	     :initform (bordeaux-threads:make-condition-variable))
+   (configure-gc :initarg :configure-gc
+		 :accessor configure-gc
+		 :initform nil)
    (root :initarg :root
 	 :accessor root
 	 :initform nil)
@@ -170,12 +173,22 @@
     (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
       (and exist-p (xlib:window-equal xwin (xwindow win)) win))))
 
+(defun max-or (num1 num2)
+  (if (and num1 num2)
+      (max num1 num2)
+      (or num1 num2)))
+
+(defun min-or (num1 num2)
+  (if (and num1 num2)
+      (min num1 num2)
+      (or num1 num2)))
+
 (defun update-screen-window-geometry (window screen)
   (let* ((xwindow (xwindow window))
-	 (old-x (xlib:drawable-x xwindow))
-	 (old-y (xlib:drawable-y xwindow))
-	 (old-width (xlib:drawable-width xwindow))
-	 (old-height (xlib:drawable-height xwindow))
+	 (old-x (or (orig-x window) (xlib:drawable-x xwindow)))
+	 (old-y (or (orig-y window) (xlib:drawable-y xwindow)))
+	 (old-width (or (orig-width window) (xlib:drawable-width xwindow)))
+	 (old-height (or (orig-height window) (xlib:drawable-height xwindow)))
 	 (new-x (max old-x (x screen)))
 	 (new-y (max old-y (y screen)))
 	 (new-width (min old-width (width screen)))
@@ -185,32 +198,41 @@
 	    (xlib:drawable-y xwindow) new-y
 	    (xlib:drawable-width xwindow) new-width
 	    (xlib:drawable-height xwindow) new-height))
-    (setf (orig-x window) (max new-x (orig-x window))
-	  (orig-y window) (max new-y (orig-y window))
-	  (orig-width window) (min new-width (orig-width window))
-	  (orig-height window) (min new-height (orig-height window)))))
+    (setf (orig-x window) new-x
+	  (orig-y window) new-y
+	  (orig-width window) new-width
+	  (orig-height window) new-height)))
 
 ;; this is lowerlevel function
 (defun manage-new-window (xwindow xparent screen)
-  (multiple-value-bind (ignore-name wm-class) (xlib:get-wm-class xwindow)
-    (declare (ignore ignore-name))
+  (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
     (let* ((map-state (xlib:window-map-state xwindow))
 	   (id (xlib:window-id xwindow))
 	   (win (make-instance 'window :id id :xwindow xwindow :map-state map-state :ws-map-state map-state
 			       :orig-width (width screen) :orig-height (height screen)))
-	   (pwin (xwindow-window xparent screen))) ;FIXME:what if we can not find the parent?
-      (setf (xlib:window-event-mask xwindow) '(:focus-change :substructure-notify :substructure-redirect))
-      (unless (or (eql (xlib:window-class xwindow) :input-only) (not (window-equal pwin (root screen))))
-	(setf (xlib:window-border xwindow) (alloc-color *default-window-border* screen)
-	      (xlib:drawable-border-width xwindow) *default-window-border-width*))
-      (if (window-equal pwin (root screen))
-	  (setf (toplevel-p win) t))
-      (setf (parent win) pwin
-	    (wm-name win) (xlib:wm-name xwindow)
-	    (wm-class win) wm-class)
-      (add-window win (display screen))
-      (add-window win screen)
-      (update-screen-window-geometry win screen))))
+	   (pwin (xwindow-window xparent screen)) ;FIXME:what if we can not find the parent?
+	   (normal-hints (xlib:wm-normal-hints xwindow)))
+      (when (window-equal pwin (root screen))
+	(unless (eql (xlib:window-class xwindow) :input-only)
+	  (setf (xlib:window-border xwindow) (alloc-color *default-window-border* screen)
+		(xlib:drawable-border-width xwindow) *default-window-border-width*))
+	(setf (toplevel-p win) t
+	      (xlib:window-event-mask xwindow) '(:focus-change
+						 :button-motion
+						 :enter-window
+						 :structure-notify))
+	(setf (parent win) pwin
+	      (wm-name win) (xlib:wm-name xwindow)
+	      (wm-instance win) wm-instance
+	      (wm-class win) wm-class
+	      (protocols win) (xlib:wm-protocols xwindow)
+	      (orig-x win) (xlib:wm-size-hints-x normal-hints)
+	      (orig-y win) (xlib:wm-size-hints-y normal-hints)
+	      (orig-width win) (xlib:wm-size-hints-width normal-hints)
+	      (orig-height win) (xlib:wm-size-hints-height normal-hints))
+	(add-window win (display screen))
+	(add-window win screen)
+	(update-screen-window-geometry win screen)))))
 
 (defmethod manage-screen-root ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
@@ -228,6 +250,7 @@
 	  (gethash root-id (windows (display screen))) root
 	  (root screen) root
 	  (xlib:window-event-mask (xwindow (root screen))) '(:focus-change
+							     :button-motion
 							     :substructure-notify
 							     :substructure-redirect))))
 
@@ -312,4 +335,11 @@
 	(input-gc screen) (create-gcontext (input-window screen)
 					   (alloc-color *background-color* screen)
 					   (alloc-color *foreground-color* screen)
-					   (input-font screen))))
+					   (input-font screen))
+	(configure-gc screen) (xlib:create-gcontext :drawable (xwindow (root screen))
+						    :font (message-font screen)
+						    :foreground (alloc-color *foreground-color* screen)
+						    :background (alloc-color *background-color* screen)
+						    :line-style :dash
+						    :line-width 1
+						    :subwindow-mode :include-inferiors)))

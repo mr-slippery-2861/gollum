@@ -79,7 +79,8 @@
 	   (top (find-toplevel win))
 	   (screen (screen top))
 	   (workspace (current-workspace screen)))
-      (setf (current-window workspace) top)))
+      (set-input-focus top)
+      (dformat 1 "window ~a get focus" (wm-name win))))
   t)
 
 (define-event-handler :focus-out (window mode kind)
@@ -109,6 +110,22 @@
     t))
 
 (define-event-handler :key-release ()
+  t)
+
+(define-event-handler :motion-notify (state window x y root-x root-y)
+  (let ((d (xdisplay-display display))
+	(win (xwindow-window window d)))
+    (dformat 1 "motion-notify, window ~a x ~a y ~a root-x ~a root-y ~a" (wm-name win) x y root-x root-y)))
+
+(define-event-handler :enter-notify (window mode kind)
+  (if (and (eql mode :normal) (not (find kind '(:virtual :nonlinear-virtual :inferior))))
+      (let* ((d (xdisplay-display display))
+	     (win (xwindow-window window d))
+	     (top (find-toplevel win))
+	     (screen (screen win)))
+	(unless (window-equal win (root screen))
+	  (setf (current-window (current-workspace screen)) top))
+	(dformat 1 "enter-notify received,window ~a mode ~a kind ~a" (wm-name win) mode kind)))
   t)
 
 ;; Keyboard and Pointer State Events
@@ -143,21 +160,17 @@
 (define-event-handler :destroy-notify (window)
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d)))
-    (message "destroy-notify received,id:~a" (xlib:window-id window))
-    (when w
-      (delete-window w d)))
+    (delete-window w d))
   t)
 
 (define-event-handler :gravity-notify ()
   t)
 
 (define-event-handler :map-notify (window override-redirect-p)
-  (unless override-redirect-p
-    (message "map-notify received,window ~a" (xlib:get-wm-class window)))
   t)
 
 (define-event-handler :reparent-notify (window parent override-redirect-p)
-  (message "window ~a reparented to its new parent ~a" (xlib:get-wm-class window) (xlib:get-wm-class parent))
+  (dformat 1 "window ~a reparented to its new parent ~a" (xlib:get-wm-class window) (xlib:get-wm-class parent))
   t)
 
 (define-event-handler :unmap-notify ()
@@ -211,6 +224,7 @@
   (let* ((d (xdisplay-display display))
 	 (w (xwindow-window window d))
 	 (ws (workspace w)))
+    (dformat 1 "map-request received,window ~a" (wm-name w))
     (if (toplevel-p w)
 	(progn
 	  (setf (ws-map-state w) :viewable)

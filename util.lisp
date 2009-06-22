@@ -32,3 +32,14 @@ Modifies the match data; use `save-match-data' if necessary."
 
 (defmacro concat (&rest strings)
   `(concatenate 'string ,@strings))
+
+;; from stumpwm,thanks:)
+(defvar *debug-level* 0)
+
+(defvar *debug-stream* *error-output*)
+
+(defun dformat (level control-string &rest format-arguments)
+  (when (>= *debug-level* level)
+    (multiple-value-bind (sec m h) (decode-universal-time (get-universal-time))
+      (format *debug-stream* "~2,'0d:~2,'0d:~2,'0d " h m sec))
+    (write-line (apply #'format nil control-string format-arguments) *debug-stream*)))

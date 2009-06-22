@@ -42,6 +42,8 @@
 
 (defgeneric list-windows (obj))
 
+(defgeneric workspace-raise-window (workspace window))
+
 (defgeneric workspace-next-window (workspace))
 
 (defgeneric workspace-prev-window (workspace))
@@ -74,7 +76,7 @@
     (setf (workspace win) obj)
     (case (get-wm-state win)
       (0 (push win (withdrawn-windows obj)))
-      (1 (push win (mapped-windows obj)))) ;FIXME:which position to put
+      (1 (setf (mapped-windows obj) (append (mapped-windows obj) (list win))))) ;FIXME:which position to put
     (unless (workspace-equal obj (current-workspace (screen win)))
       (unmap-workspace-window win))
     (if (null (current-window obj))
@@ -98,7 +100,7 @@
   (mapc #'map-workspace-window (mapped-windows workspace))
   (when (current-window workspace)
     (raise-window (current-window workspace))
-    (set-input-focus (current-window workspace))))
+    (set-input-focus (current-window workspace) :parent)))
 
 (defmethod unmap-workspace ((workspace workspace))
   (mapc #'unmap-workspace-window (mapped-windows workspace)))
@@ -113,6 +115,17 @@
 (defmethod current-window ((obj null))
   (current-window (current-workspace nil)))
 
+(defun workspace-nwindows (workspace)
+  (length (mapped-windows workspace)))
+
+(defmethod workspace-raise-window ((workspace workspace) (window window))
+  (let ((windows (mapped-windows workspace)))
+    (when (find window windows :test #'window-equal)
+      (setf (current-window workspace) window
+	    (mapped-windows workspace) (list* window (remove window windows :test #'window-equal)))
+      (raise-window window)
+      (set-input-focus window :parent))))
+
 (defmethod workspace-next-window ((workspace workspace))
   (let ((windows (mapped-windows workspace)))
     (when (> (length windows) 1)
@@ -121,7 +134,7 @@
 	(setf (mapped-windows workspace) (append (cdr windows) (list current))
 	      (current-window workspace) next)
 	(raise-window next)
-	(set-input-focus next)))))
+	(set-input-focus next :parent)))))
 
 (defun next-window ()
   (workspace-next-window (current-workspace nil)))
@@ -133,7 +146,7 @@
 	(setf (mapped-windows workspace) (list* prev (butlast windows))
 	      (current-window workspace) prev)
 	(raise-window prev)
-	(set-input-focus prev)))))
+	(set-input-focus prev :parent)))))
 
 (defun prev-window ()
   (workspace-prev-window (current-workspace nil)))

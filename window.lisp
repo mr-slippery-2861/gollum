@@ -37,8 +37,14 @@
    (wm-name :initarg :wm-name
 	     :accessor wm-name
 	     :initform nil)
+   (wm-instance :initarg :wm-instance
+		:accessor wm-instance
+		:initform nil)
    (wm-class :initarg :wm-class
 	      :accessor wm-class
+	      :initform nil)
+   (protocols :initarg :protocols
+	      :accessor protocols
 	      :initform nil)
    (group :initarg :group		;this is not the same as group in stumpwm at all!more like in starcraft
 	  :accessor group
@@ -74,7 +80,7 @@
 (defgeneric raise-window (win)
   (:documentation "put the window on top of other windows"))
 
-(defgeneric set-input-focus (window))
+(defgeneric set-input-focus (focus &optional revert-to))
 
 (defgeneric match-window (win &key class name)
   (:documentation "return T if a window satisfies the description against match-type"))
@@ -90,6 +96,12 @@
 (defgeneric restore-window (window))
 
 (defgeneric minimize-window (window))
+
+(defgeneric reconfigure-window (window x y width height &key prompt))
+
+(defgeneric move-window (window x y &key prompt))
+
+(defgeneric resize-window (window width height &key prompt))
 
 (defgeneric grab-key (win keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
 
@@ -139,12 +151,24 @@
   (xlib:with-state ((xwindow win))
     (setf (xlib:window-priority (xwindow win)) :top-if)))
 
-(defmethod set-input-focus ((window window))
-  (xlib:set-input-focus (xdisplay (display window)) (xwindow window) :parent))
+;; Input Model 	        Input Field 	WM_TAKE_FOCUS
+;; No Input 	        False 	        Absent             we are not needed to set
+;; Passive 	        True 	        Absent             we are needed to set
+;; Locally Active 	True 	        Present            we are needed to set
+;; Globally Active 	False 	        Present            we are not needed to set
+(defun input-field (window)
+  (let (hints (xlib:wm-hints (xwindow window)))
+    (if hints
+	(eql (xlib:wm-hints-input hints) :on)
+	nil)))
+
+(defmethod set-input-focus ((focus window) &optional (revert-to :parent))
+  (if (input-field focus)
+      (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to)))
 
 (defun kill-window (window)
   (let ((display (display window)))
-    (if (find :WM_DELETE_WINDOW (xlib:wm-protocols (xwindow window)))
+    (if (find :WM_DELETE_WINDOW (protocols window))
 	(xlib:send-event (xwindow window) :client-message nil :window (xwindow window)
 			                                      :type :WM_PROTOCOLS
 							      :format 32
@@ -182,7 +206,8 @@
   (eql (size-state window) :maximized))
 
 (defun maximize ()
-  (maximize-window (current-window nil)))
+  (if (current-window nil)
+      (maximize-window (current-window nil))))
 
 (defmethod restore-window ((window window))
   (let* ((x (orig-x window))
@@ -199,7 +224,23 @@
     (flush-display (display window))))
 
 (defun restore ()
-  (restore-window (current-window nil)))
+  (if (current-window nil)
+      (restore-window (current-window nil))))
+
+(defmethod move-window ((window window) x y &key (prompt nil))
+  (if prompt
+      (let* ((screen (screen window))
+	     (gc (configure-gc screen))
+	     (xroot (xwindow (root screen)))
+	     (xwindow (xwindow window))
+	     (width (xlib:drawable-width xwindow))
+	     (height (xlib:drawable-height xwindow)))
+	(xlib:clear-area xroot)
+	(xlib:draw-lines xroot gc (list x y width 0 0 height (- width) 0 0 (- height))))
+      (let ((xwindow (xwindow window)))
+	(xlib:with-state (xwindow)
+	  (setf (xlib:drawable-x xwindow) x
+		(xlib:drawable-y xwindow) y)))))
 
 (defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-key (xwindow win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
