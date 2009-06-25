@@ -95,11 +95,6 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 	      (return-from describe-key nil)))))
     keymap))
 
-(defun symbol->function (symbol)
-  (handler-case (symbol-function symbol)
-    (undefined-function () nil)
-    (type-error () nil)))
-
 (defun key->key-desc (display key)
   (labels ((mod->abbr (mod)
 	     (case mod
@@ -126,22 +121,23 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 	(setf grab-state (grab-keyboard (root (current-screen display)) :owner-p nil :sync-pointer-p nil :sync-keyboard-p nil))))
     (multiple-value-bind (action exist-p) (gethash key (find-keymap (current-keymap display) display))
       (if exist-p
-	  (let ((args (if (listp action) (cdr action) nil))
-		(action (if (listp action) (car action) action))
-		(current-key-desc (key->key-desc display key)))
+	  (let* ((args (if (listp action) (cdr action) nil))
+		 (action (if (listp action) (car action) action))
+		 (current-key-desc (key->key-desc display key))
+		 (screen (current-screen display)))
 	    (cond
 	      ((command-p action) (progn	;if action is a command,we run it,and restore the keymap state
 				    (run-command action)
 				    (xlib:ungrab-keyboard (xdisplay display))
 				    (setf (current-keymap display) :top-map
 					  key-desc "-")
-				    (screen-message (current-screen display) (string action))))
+				    (screen-prompt-key screen (string action) t)))
 	      ((symbol->function action) (progn	;if it's a function,we call it
 					   (apply (symbol-function action) args)
 					   (unless (eql (current-keymap display) :input-map)
 					     (xlib:ungrab-keyboard (xdisplay display))
 					     (setf (current-keymap display) :top-map)
-					     (screen-message (current-screen display) (string action)))
+					     (screen-prompt-key screen (string action) t))
 					   (setf key-desc "-")))
 	      ((keywordp action) (setf (current-keymap display) action
 				       key-desc (string-trim " " (concat
@@ -149,13 +145,13 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 								  " "
 								  current-key-desc
 								  "-")))
-	       (screen-message (current-screen display) key-desc nil)))) ;else,we asume it a keymap,so set the keymap state
+	       (screen-prompt-key screen key-desc)))) ;else,we asume it a keymap,so set the keymap state
 	  (progn				      ;there is no action corresponding the key
-	    (screen-message (current-screen display) (string-trim " " (concat
+	    (screen-prompt-key (current-screen display) (string-trim " " (concat
 								       (subseq key-desc 0 (1- (length key-desc)))
 								       " "
 								       (key->key-desc display key)
-								       " not binded")))
+								       " not binded")) t)
 	    (setf (current-keymap display) :top-map
 		  key-desc "-")
 	    (xlib:ungrab-keyboard (xdisplay display)))))))
