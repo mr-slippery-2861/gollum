@@ -25,11 +25,11 @@
    (mode-line :initarg :mode-line
 	      :accessor mode-line
 	      :initform nil)
-   (message-gc :initarg :message-gc
-	       :accessor message-gc
+   (output-gc :initarg :output-gc
+	       :accessor output-gc
 	       :initform nil)
-   (message-font :initarg :message-font
-		 :accessor message-font
+   (output-font :initarg :output-font
+		 :accessor output-font
 		 :initform nil)
    (message-window :initarg :message-window
 		   :accessor message-window
@@ -37,6 +37,12 @@
    (message-timer :initarg :message-timer
 		  :accessor message-timer
 		  :initform nil)
+   (key-prompt-window :initarg :key-prompt-window
+		      :accessor key-prompt-window
+		      :initform nil)
+   (key-prompt-timer :initarg :key-prompt-timer
+		     :accessor key-prompt-timer
+		     :initform nil)
    (input-gc :initarg :input-gc
 	     :accessor input-gc
 	     :initform nil)
@@ -117,7 +123,8 @@
 (defmethod make-internal-window ((s screen))
   (xlib:create-window :parent (xwindow (root s))
 		      :x 0 :y 0 :width 1 :height 1
-		      :override-redirect :on))
+		      :override-redirect :on
+		      :save-under :on))
 
 (defmethod set-current-workspace ((ws workspace) (s screen))
   (setf (current-workspace s) ws))
@@ -266,16 +273,34 @@
   (let* ((height (height screen))
 	 (width (width screen))
 	 (window-height (xlib:drawable-height xwindow))
-	 (window-width (xlib:drawable-width xwindow)))
+	 (window-width (xlib:drawable-width xwindow))
+	 (double-border (* 2 *internal-window-border-width*)))
     (case gravity
-      (:bottom-center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width (* 2 *internal-window-border-width*)) 2))
-			    (xlib:drawable-y xwindow) (- height window-height (* 2 *internal-window-border-width*))))
       (:center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width) 2))
-		     (xlib:drawable-y xwindow) (floor (/ (- height window-height) 2)))))))
+		     (xlib:drawable-y xwindow) (floor (/ (- height window-height) 2))))
+      (:bottom-left (setf (xlib:drawable-x xwindow) 0
+			  (xlib:drawable-y xwindow) (- height window-height double-border)))
+      (:bottom-center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width double-border) 2))
+			    (xlib:drawable-y xwindow) (- height window-height double-border)))
+      (:bottom-right (setf (xlib:drawable-x xwindow) (- width window-width double-border)
+			   (xlib:drawable-y xwindow) (- height window-height double-border)))
+      (:top-left (setf (xlib:drawable-x xwindow) 0
+		       (xlib:drawable-y xwindow) 0))
+      (:top-center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width double-border) 2))
+			 (xlib:drawable-y xwindow) 0))
+      (:top-right (setf (xlib:drawable-x xwindow) (- width window-width double-border)
+			(xlib:drawable-y xwindow) 0))
+      (:pointer (multiple-value-bind (x y) (xlib:query-pointer (xwindow (root screen)))
+		  (setf (xlib:drawable-x xwindow) x
+			(xlib:drawable-y xwindow) y))))))
 
 (defun setup-window-for-drawing-glyphs (screen xwindow gravity gcontext font content)
-  (let* ((height (+ (xlib:font-descent font) (xlib:font-ascent font)))
-	 (width (xlib:text-width font content)))
+  "CONTENT is a list of string indicating multi-line drawing"
+  (let* ((descent (xlib:font-descent font))
+	 (ascent (xlib:font-ascent font))
+	 (height (* (length content) (+ ascent descent)))
+	 (width (apply #'max (mapcar (lambda (line)
+				       (xlib:text-width font line :translate #'translate-id)) content))))
     (xlib:with-state (xwindow)
       (if (eql (xlib:window-map-state xwindow) :unmapped)
 	  (xlib:map-window xwindow))
@@ -317,17 +342,23 @@
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
   (manage-existing-windows screen)
   (setf (mode-line screen) (make-internal-window screen)
-	(message-font screen) (open-font (display screen) *output-font*)
+	(output-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
 	(xlib:window-border (message-window screen)) (alloc-color *internal-window-border* screen)
-	(message-gc screen) (create-gcontext (message-window screen)
+	(output-gc screen) (create-gcontext (message-window screen)
 					     (alloc-color *background-color* screen)
 					     (alloc-color *foreground-color* screen)
-					     (message-font screen))
+					     (output-font screen))
 	(message-timer screen) (make-instance 'message-timer
-					      :action #'hide-screen-message
+					      :action 'hide-screen-message
 					      :screen screen)
+	(key-prompt-timer screen) (make-instance 'message-timer
+						 :action 'hide-key-prompt
+						 :screen screen)
+	(key-prompt-window screen) (make-internal-window screen)
+	(xlib:drawable-border-width (key-prompt-window screen)) *internal-window-border-width*
+	(xlib:window-border (key-prompt-window screen)) (alloc-color *internal-window-border* screen)
 	(input-font screen) (open-font (display screen) *input-font*)
 	(input-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (input-window screen)) *internal-window-border-width*
@@ -337,12 +368,12 @@
 					   (alloc-color *foreground-color* screen)
 					   (input-font screen))
 	(configure-gc screen) (xlib:create-gcontext :drawable (xwindow (root screen))
-						    :font (message-font screen)
+						    :font (output-font screen)
 						    :foreground (alloc-color *foreground-color* screen)
 						    :background (alloc-color *background-color* screen)
 						    :line-style :dash
 						    :line-width 1
-						    :subwindow-mode :include-inferiors))
+						    :subwindow-mode :clip-by-children))
   (xlib:grab-button (xwindow (root screen)) 1 '(:button-motion :button-release) ;FIXME:should be customizable
 		    :modifiers (list (key->mod :alt (key-mod-map (display screen))))
 		    :owner-p nil
