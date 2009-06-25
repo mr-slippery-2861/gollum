@@ -37,3 +37,9 @@
       (message "~a" (name workspace)))
     (unless workspace
       (message "workspace ~a does not exist." ws))))
+
+(defun message (control-string &rest format-arguments)
+  (screen-message (current-screen nil) (apply #'format nil control-string format-arguments)))
+
+(defun permanent-message (control-string &rest format-arguments)
+  (screen-message (current-screen nil) (apply #'format nil control-string format-arguments) nil))
