@@ -33,6 +33,11 @@ Modifies the match data; use `save-match-data' if necessary."
 (defmacro concat (&rest strings)
   `(concatenate 'string ,@strings))
 
+(defun symbol->function (symbol)
+  (handler-case (symbol-function symbol)
+    (undefined-function () nil)
+    (type-error () nil)))
+
 ;; from stumpwm,thanks:)
 (defvar *debug-level* 0)
 
@@ -43,3 +48,27 @@ Modifies the match data; use `save-match-data' if necessary."
     (multiple-value-bind (sec m h) (decode-universal-time (get-universal-time))
       (format *debug-stream* "~2,'0d:~2,'0d:~2,'0d " h m sec))
     (write-line (apply #'format nil control-string format-arguments) *debug-stream*)))
+
+;; I cannot draw chinese characters without this function,thanks to stumpwm again
+(defun translate-id (src src-start src-end font dst dst-start)
+  "A simple replacement for xlib:translate-default.  just the
+identity with a range check."
+  (let ((min (xlib:font-min-char font))
+        (max (xlib:font-max-char font)))
+    (decf src-end)
+    (if (stringp src)      ; clx does this test so i guess it's needed
+        (loop for i from src-start to src-end
+              for j from dst-start
+              as c = (char-code (char src i))
+              if (<= min c max) do (setf (aref dst j) c)
+              ;; replace unknown characters with question marks
+              else do (setf (aref dst j) (char-code #\?))
+              finally (return i))
+        (loop for i from src-start to src-end
+              for j from dst-start
+              as c = (elt src i)
+              as n = (if (characterp c) (char-code c) c)
+              if (and (integerp n) (<= min n max)) do (setf (aref dst j) n)
+              ;; ditto
+              else do (setf (aref dst j) (char-code #\?))
+              finally (return i)))))
