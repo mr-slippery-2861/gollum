@@ -99,7 +99,7 @@
 
 (defgeneric reconfigure-window (window x y width height &key prompt))
 
-(defgeneric move-window (window x y &key prompt))
+(defgeneric drag-move-window (window x y &key prompt))
 
 (defgeneric resize-window (window width height &key prompt))
 
@@ -227,20 +227,43 @@
   (if (current-window nil)
       (restore-window (current-window nil))))
 
-(defmethod move-window ((window window) x y &key (prompt nil))
-  (if prompt
-      (let* ((screen (screen window))
-	     (gc (configure-gc screen))
-	     (xroot (xwindow (root screen)))
-	     (xwindow (xwindow window))
-	     (width (xlib:drawable-width xwindow))
-	     (height (xlib:drawable-height xwindow)))
-	(xlib:clear-area xroot)
-	(xlib:draw-lines xroot gc (list x y width 0 0 height (- width) 0 0 (- height))))
-      (let ((xwindow (xwindow window)))
-	(xlib:with-state (xwindow)
-	  (setf (xlib:drawable-x xwindow) x
-		(xlib:drawable-y xwindow) y)))))
+(let ((first-x nil)
+      (first-y nil))
+  (defun calculate-move-offsets (x y)
+    (unless first-x
+      (setf first-x x
+	    first-y y))
+    (if x
+	(values (- x first-x) (- y first-y))
+	(setf first-x nil
+	      first-y nil))))
+
+(defmethod drag-move-window ((window window) x y &key (prompt nil))
+  (multiple-value-bind (offset-x offset-y) (calculate-move-offsets x y)
+    (let* ((screen (screen window))
+	   (gc (configure-gc screen))
+	   (xwindow (xwindow window))
+	   (xroot (xwindow (root screen)))
+	   (current-x (xlib:drawable-x xwindow))
+	   (current-y (xlib:drawable-y xwindow))
+	   (new-x (+ current-x offset-x))
+	   (new-y (+ current-y offset-y)))
+      (if prompt
+	  (let ((width (xlib:drawable-width xwindow))
+		(height (xlib:drawable-height xwindow)))
+	    (xlib:clear-area xroot)
+	    (xlib:send-event xwindow :exposure (xlib:make-event-mask :exposure))
+	    (xlib:draw-lines xroot gc (list new-x new-y width 0 0 height (- width) 0 0 (- height)) :relative-p t))
+	  (progn
+	    (xlib:with-state (xwindow)
+	      (setf (xlib:drawable-x xwindow) new-x
+		    (xlib:drawable-y xwindow) new-y))
+	    (setf (orig-x window) new-x
+		  (orig-y window) new-y)
+	    (calculate-move-offsets nil nil)
+	    (xlib:clear-area xroot)
+	    (xlib:send-event xwindow :exposure (xlib:make-event-mask :exposure))))
+      (flush-display (display screen)))))
 
 (defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-key (xwindow win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
