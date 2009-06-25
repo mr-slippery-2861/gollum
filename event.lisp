@@ -112,10 +112,37 @@
 (define-event-handler :key-release ()
   t)
 
-(define-event-handler :motion-notify (state window x y root-x root-y)
+(define-event-handler :button-press ()
+  (dformat 1 "button pressed")
+  t)
+
+(define-event-handler :button-release ()
+  (dformat 1 "button released")
+  t)
+
+(defun check-peek-event (xdisplay)
+    (xlib:event-case (xdisplay :peek-p t :timeout nil)
+      (t (event-key)
+	 event-key)))
+
+(defun pointer-current-xwindow (xroot)
+  (multiple-value-bind (x y same-screen-p child state-mask root-x root-y root) (xlib:query-pointer xroot)
+    (declare (ignore x y same-screen-p state-mask root-x root-y root))
+    child))
+
+(define-event-handler :motion-notify (state window root-x root-y)
   (let* ((d (xdisplay-display display))
-	 (win (xwindow-window window d)))
-    (dformat 1 "motion-notify, window ~a x ~a y ~a root-x ~a root-y ~a" (wm-name win) x y root-x root-y)))
+	 (win (xwindow-window window d))
+	 (xcurrent (pointer-current-xwindow window)))
+    ;; (if (eql (check-peek-event display) :button-release)
+    ;; 	(drag-move-window win root-x root-y ))
+    (when xcurrent
+      (if (eql (check-peek-event display) :button-release)
+	  (drag-move-window (xwindow-window xcurrent d) root-x root-y)
+	  (drag-move-window (xwindow-window xcurrent d) root-x root-y :prompt t))
+      (dformat 1 "motion-notify, window ~a event-window ~a root-x ~a root-y ~a next-event ~a" (wm-name win) (wm-name (xwindow-window xcurrent d)) root-x root-y (check-peek-event display)))
+    )
+  t)
 
 (define-event-handler :enter-notify (window mode kind)
   (if (and (eql mode :normal) (not (find kind '(:virtual :nonlinear-virtual :inferior))))
