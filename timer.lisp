@@ -22,6 +22,8 @@
 (defvar *all-timers* nil)
 
 (defvar *timers-lock* (bordeaux-threads:make-recursive-lock "timers-lock"))
+(defvar *timers-cv* (bordeaux-threads:make-condition-variable))
+(defvar *idle-lock* (bordeaux-threads:make-lock "idle-lock"))
 
 (defconstant +timer-sleep-time+ 0.5
   "number of seconds the timer runner sleeps everytime.")
@@ -30,11 +32,13 @@
 
 (defgeneric timer< (timer1 timer2))
 
-(defgeneric add-timer (timer))
+(defgeneric add-timer (timer)
+  (:documentation "this is for internal using. use MAKE-TIMER and SCHEDULE-TIMER."))
 
 (defgeneric delete-timer (timer))
 
-(defgeneric schedule-timer (timer &optional time))
+(defgeneric schedule-timer (timer &optional time)
+  (:documentation "TIME is in how many seconds TIMER will trigger, repeat time of TIMER if not provided."))
 
 (defgeneric run-timer (timer))
 
@@ -44,7 +48,8 @@
 (defmethod add-timer ((timer timer))
   (bordeaux-threads:with-recursive-lock-held (*timers-lock*)
     (let ((new-timer (list timer)))
-      (setf *all-timers* (sort (append *all-timers* new-timer) #'timer<)))))
+      (setf *all-timers* (sort (append *all-timers* new-timer) #'timer<))))
+  (bordeaux-threads:condition-notify *timers-cv*))
 
 (defmethod delete-timer ((timer timer))
   (bordeaux-threads:with-recursive-lock-held (*timers-lock*)
@@ -71,8 +76,8 @@
 	(action (action timer)))
     (when (> time (real-time timer))
       (cond
-	((functionp action) (funcall action))
-	((and (stringp action) (command-p action)) (run-command action)))
+	((symbol->function action) (funcall (symbol->function action)))
+	((command-p action) (run-command action)))
       (if (numberp repeat)
 	  (setf (real-time timer) (+ (real-time timer) (* repeat internal-time-units-per-second)))
 	  (delete-timer timer)))))
@@ -82,16 +87,18 @@
 	(action (action timer))
 	(screen (screen timer)))
     (when (> time (real-time timer))
-      (funcall action screen)
+      (funcall (symbol->function action) screen)
       (delete-timer timer))))
 
 (defun run-timers ()
-  (when *all-timers*
-    (bordeaux-threads:with-recursive-lock-held (*timers-lock*)
-      (mapc #'run-timer *all-timers*)
-      (setf *all-timers* (sort *all-timers* #'timer<)))))
+  (bordeaux-threads:with-recursive-lock-held (*timers-lock*)
+    (mapc #'run-timer *all-timers*)
+    (setf *all-timers* (sort *all-timers* #'timer<)))
+  (sleep +timer-sleep-time+))
 
 (defun timers-runner ()
-  (loop
-     (sleep +timer-sleep-time+)
-     (run-timers)))
+  (bordeaux-threads:with-lock-held (*idle-lock*)
+    (loop
+       (if *all-timers*
+	   (run-timers)
+	   (bordeaux-threads:condition-wait *timers-cv* *idle-lock*)))))
