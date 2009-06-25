@@ -342,4 +342,9 @@
 						    :background (alloc-color *background-color* screen)
 						    :line-style :dash
 						    :line-width 1
-						    :subwindow-mode :include-inferiors)))
+						    :subwindow-mode :include-inferiors))
+  (xlib:grab-button (xwindow (root screen)) 1 '(:button-motion :button-release) ;FIXME:should be customizable
+		    :modifiers (list (key->mod :alt (key-mod-map (display screen))))
+		    :owner-p nil
+		    :sync-pointer-p nil
+		    :sync-keyboard-p nil))
