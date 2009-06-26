@@ -2,10 +2,10 @@
 
 (defvar *input-window-gravity* :bottom-center)
 
-(defun input-window-screen (window)
-  (loop for id being the hash-keys in (screens (current-display)) using (hash-value screen)
-     when (xlib:window-equal (input-window screen) window)
-     return screen))
+;; (defun input-window-screen (window)
+;;   (loop for id being the hash-keys in (screens (current-display)) using (hash-value screen)
+;;      when (xlib:window-equal (input-window screen) window)
+;;      return screen))
 
 (let ((screen nil)
       (prompt ""))
@@ -51,6 +51,7 @@
 		     #\A #\B #\C #\D #\E #\F #\G #\H #\I #\J #\K #\L #\M #\N #\O #\P #\Q #\R #\S #\T #\U #\V #\W #\X #\Y #\Z
 		     #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9 #\0
 		     #\! #\" #\# #\$ #\% #\& #\' #\( #\) #\* #\+ #\, #\. #\/ #\: #\; #\< #\= #\> #\? #\@ #\[ #\\ #\] #\^ #\_ #\` #\{ #\| #\} #\~)
+  (bind-key :input-map "C-g" :abort display)
   (bind-key :input-map "minus" (list 'self-insert #\-) display) ;"-" is used as seperator in key-description
   (bind-key :input-map "Return" 'submit-input display)
   (bind-key :input-map "space" (list 'self-insert #\Space) display)
