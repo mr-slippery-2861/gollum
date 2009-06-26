@@ -80,6 +80,10 @@
 (defgeneric raise-window (win)
   (:documentation "put the window on top of other windows"))
 
+(defgeneric circulate-window-down (window))
+
+(defgeneric circulate-window-up (window))
+
 (defgeneric set-input-focus (focus &optional revert-to))
 
 (defgeneric match-window (win &key class name)
@@ -98,8 +102,6 @@
 (defgeneric minimize-window (window))
 
 (defgeneric reconfigure-window (window x y width height &key prompt))
-
-(defgeneric drag-move-window (window x y &key prompt))
 
 (defgeneric resize-window (window width height &key prompt))
 
@@ -148,8 +150,13 @@
   (= (id w1) (id w2)))
 
 (defmethod raise-window ((win window))
-  (xlib:with-state ((xwindow win))
-    (setf (xlib:window-priority (xwindow win)) :top-if)))
+    (setf (xlib:window-priority (xwindow win)) :top-if))
+
+(defmethod circulate-window-down ((window window))
+  (xlib:circulate-window-down (xwindow window)))
+
+(defmethod circulate-window-up ((window window))
+  (xlib:circulate-window-up (xwindow window)))
 
 ;; Input Model 	        Input Field 	WM_TAKE_FOCUS
 ;; No Input 	        False 	        Absent             we are not needed to set
@@ -238,32 +245,38 @@
 	(setf first-x nil
 	      first-y nil))))
 
-(defmethod drag-move-window ((window window) x y &key (prompt nil))
-  (multiple-value-bind (offset-x offset-y) (calculate-move-offsets x y)
-    (let* ((screen (screen window))
-	   (gc (configure-gc screen))
-	   (xwindow (xwindow window))
-	   (xroot (xwindow (root screen)))
-	   (current-x (xlib:drawable-x xwindow))
-	   (current-y (xlib:drawable-y xwindow))
-	   (new-x (+ current-x offset-x))
-	   (new-y (+ current-y offset-y)))
-      (if prompt
-	  (let ((width (xlib:drawable-width xwindow))
-		(height (xlib:drawable-height xwindow)))
-	    (xlib:clear-area xroot)
-	    (xlib:send-event xwindow :exposure (xlib:make-event-mask :exposure))
-	    (xlib:draw-lines xroot gc (list new-x new-y width 0 0 height (- width) 0 0 (- height)) :relative-p t))
-	  (progn
-	    (xlib:with-state (xwindow)
-	      (setf (xlib:drawable-x xwindow) new-x
-		    (xlib:drawable-y xwindow) new-y))
-	    (setf (orig-x window) new-x
-		  (orig-y window) new-y)
-	    (calculate-move-offsets nil nil)
-	    (xlib:clear-area xroot)
-	    (xlib:send-event xwindow :exposure (xlib:make-event-mask :exposure))))
-      (flush-display (display screen)))))
+(let ((target-window nil))
+  (defun set-drag-move-window (window)
+    (setf target-window window))
+  (defun drag-move-window (x y &key (prompt nil))
+    (when target-window
+      (multiple-value-bind (offset-x offset-y) (calculate-move-offsets x y)
+	(let* ((screen (screen target-window))
+	       (min-x (x screen))
+	       (min-y (y screen))
+	       (max-x (+ min-x (width screen)))
+	       (max-y (+ min-y (height screen)))
+	       (gc (configure-gc screen))
+	       (xwindow (xwindow target-window))
+	       (xroot (xwindow (root screen)))
+	       (current-x (xlib:drawable-x xwindow))
+	       (current-y (xlib:drawable-y xwindow))
+	       (new-x (second (sort (list min-x (+ current-x offset-x) max-x) #'<)))
+	       (new-y (second (sort (list min-y (+ current-y offset-y) max-y) #'<))))
+	  (if prompt
+	      (let ((width (xlib:drawable-width xwindow))
+		    (height (xlib:drawable-height xwindow)))
+		(xlib:clear-area xroot)
+		(xlib:draw-lines xroot gc (list new-x new-y width 0 0 height (- width) 0 0 (- height)) :relative-p t))
+	      (progn
+		(xlib:with-state (xwindow)
+		  (setf (xlib:drawable-x xwindow) new-x
+			(xlib:drawable-y xwindow) new-y))
+		(setf (orig-x target-window) new-x
+		      (orig-y target-window) new-y)
+		(calculate-move-offsets nil nil)
+		(xlib:clear-area xroot)))
+	  (flush-display (display screen)))))))
 
 (defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-key (xwindow win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
