@@ -2,6 +2,7 @@
 
 (defun setup-default-bindings (display)
   (bind-key :top-map "C-t" :root-map display)
+  (bind-key :root-map "C-g" :abort display)
   (bind-key :root-map "w" :window-map display)
   (bind-key :root-map "n" 'next-window display)
   (bind-key :root-map "p" 'prev-window display)
@@ -14,6 +15,7 @@
   (bind-key :root-map "F6" (list 'go-to-workspace 6) display)
   (bind-key :root-map "F7" (list 'go-to-workspace 7) display)
   (bind-key :root-map "F8" (list 'go-to-workspace 8) display)
+  (bind-key :window-map "C-g" :abort)
   (bind-key :window-map "M" 'maximize display)
   (bind-key :window-map "r" 'restore display))
 
