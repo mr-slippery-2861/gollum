@@ -114,47 +114,46 @@ example:(bind-key :top-map \"C-h\" :help-map)"
 							   mod))))) mods)
 	(concat result (string key-char))))))
 
-(let ((key-desc "-"))
+(let ((key-desc ""))
   (defmethod do-bind (key xwindow (display display))
     (when (eql (current-keymap display) :top-map)
-      (let ((grab-state nil))
-	(setf grab-state (grab-keyboard (root (current-screen display)) :owner-p nil :sync-pointer-p nil :sync-keyboard-p nil))))
+      (grab-keyboard (root (current-screen display)) :owner-p nil :sync-pointer-p nil :sync-keyboard-p nil))
     (multiple-value-bind (action exist-p) (gethash key (find-keymap (current-keymap display) display))
-      (if exist-p
-	  (let* ((args (if (listp action) (cdr action) nil))
-		 (action (if (listp action) (car action) action))
-		 (current-key-desc (key->key-desc display key))
-		 (screen (current-screen display)))
+      (let* ((args (if (listp action) (cdr action) nil))
+	     (action (if (listp action) (car action) action))
+	     (current-key-desc (string-trim " " (concat key-desc " " (key->key-desc display key))))
+	     (screen (current-screen display)))
+	(if exist-p
 	    (cond
-	      ((command-p action) (progn	;if action is a command,we run it,and restore the keymap state
+	      ((command-p action) (progn ;if action is a command,we run it,and restore the keymap state
+				    (hide-key-prompt screen)
 				    (run-command action)
 				    (xlib:ungrab-keyboard (xdisplay display))
 				    (setf (current-keymap display) :top-map
-					  key-desc "-")
-				    (screen-prompt-key screen (string action) t)))
+					  key-desc "")))
 	      ((symbol->function action) (progn	;if it's a function,we call it
+					   (hide-key-prompt screen)
 					   (apply (symbol-function action) args)
 					   (unless (eql (current-keymap display) :input-map)
 					     (xlib:ungrab-keyboard (xdisplay display))
-					     (setf (current-keymap display) :top-map)
-					     (screen-prompt-key screen (string action) t))
-					   (setf key-desc "-")))
+					     (setf (current-keymap display) :top-map))
+					   (setf key-desc "")))
+	      ((eql action :abort) (when (eql (current-keymap display) :input-map)
+				     (xlib:unmap-window (input-window screen))
+				     (setf (input-buffer screen) nil)
+				     (bordeaux-threads:condition-notify (input-cv screen)))
+	       (xlib:ungrab-keyboard (xdisplay display))
+	       (setf (current-keymap display) :top-map
+					 key-desc "")
+	       (screen-prompt-key screen "^1Aborted." t))
 	      ((keywordp action) (setf (current-keymap display) action
-				       key-desc (string-trim " " (concat
-								  (subseq key-desc 0 (1- (length key-desc)))
-								  " "
-								  current-key-desc
-								  "-")))
-	       (screen-prompt-key screen key-desc)))) ;else,we asume it a keymap,so set the keymap state
-	  (progn				      ;there is no action corresponding the key
-	    (screen-prompt-key (current-screen display) (string-trim " " (concat
-								       (subseq key-desc 0 (1- (length key-desc)))
-								       " "
-								       (key->key-desc display key)
-								       " not binded")) t)
-	    (setf (current-keymap display) :top-map
-		  key-desc "-")
-	    (xlib:ungrab-keyboard (xdisplay display)))))))
+				       key-desc current-key-desc)
+	       (screen-prompt-key screen (concat key-desc "-")))) ;else,we asume it a keymap,so set the keymap state
+	    (progn		   ;there is no action corresponding the key
+	      (screen-prompt-key screen (concat current-key-desc " not binded") t)
+	      (setf (current-keymap display) :top-map
+		    key-desc "")
+	      (xlib:ungrab-keyboard (xdisplay display))))))))
 
 (defun update-key-mod-map (display)
   (multiple-value-bind (map mods mod-keycodes) (make-key-mod-map (xdisplay display))
