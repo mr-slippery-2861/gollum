@@ -70,6 +70,9 @@
    (windows :initarg :windows
 	    :accessor windows
 	    :initform (make-hash-table))
+   (stacking-orderd :initarg :stacking-orderd
+		    :accessor stacking-orderd
+		    :initform nil)	;this is a list of window-id in stacking-order
    (workspaces :initarg :workspaces
 	       :accessor workspaces
 	       :initform (make-hash-table))
@@ -142,10 +145,16 @@
       (switch-to-workspace ws s))
     (raise-window win)))
 
-(defmethod add-window ((win window) (obj screen))
-  (setf (gethash (id win) (windows obj)) win
-	(screen win) obj)
-  (place-window win))
+(defun sort-by-stacking-order (window-list screen)
+  (sort window-list #'< :key (lambda (window)
+			       (position (id window) (stacking-orderd screen) :test #'=))))
+
+(defmethod add-window ((window window) (obj screen))
+  (setf (gethash (id window) (windows obj)) window
+;; CLX: The new window is initially unmapped and is placed on top of its siblings in the stacking order
+	(stacking-orderd obj) (append (stacking-orderd obj) (list (id window)))
+	(screen window) obj)
+  (place-window window))
 
 (defmethod delete-window ((win window) (obj screen))
   (let ((id (id win))
@@ -155,7 +164,8 @@
     (multiple-value-bind (w exist-p) (gethash id (windows obj))
       (declare (ignore w))
       (when exist-p
-	(remhash id (windows obj))))))
+	(remhash id (windows obj))
+	(setf (stacking-orderd obj) (remove id (stacking-orderd obj) :test #'=))))))
 
 (defmethod add-workspace-to-screen (name (screen screen))
   (or (find-workspace-by-name name (workspaces screen))
@@ -263,7 +273,7 @@
 
 (defmethod manage-existing-windows ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
-	 (window-list (xlib:query-tree xroot)))
+	 (window-list (xlib:query-tree xroot))) ;from bottom-most (first) to top-most (last)
     (dolist (win window-list)
       (unless (eql :on (xlib:window-override-redirect win))
 	(set-wm-state win (case (xlib:window-map-state win) (:unmapped 0) (:viewable 1)))
