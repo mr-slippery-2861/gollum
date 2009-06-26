@@ -5,12 +5,16 @@
 (defvar *key-prompt-window-gravity* :pointer)
 
 (defun hide-screen-message (screen)
-  (xlib:unmap-window (message-window screen))
-  (flush-display (display screen)))
+  (let ((window (message-window screen)))
+    (when (eql (xlib:window-map-state window) :viewable)
+      (xlib:unmap-window window)
+      (flush-display (display screen)))))
 
 (defun hide-key-prompt (screen)
-  (xlib:unmap-window (key-prompt-window screen))
-  (flush-display (display screen)))
+  (let ((window (key-prompt-window screen)))
+    (when (eql (xlib:window-map-state window) :viewable)
+      (xlib:unmap-window window)
+      (flush-display (display screen)))))
 
 (defun parse-color-controling (string)
   (let ((raw-string nil)
