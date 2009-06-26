@@ -76,7 +76,7 @@
     (setf (workspace win) obj)
     (case (get-wm-state win)
       (0 (push win (withdrawn-windows obj)))
-      (1 (setf (mapped-windows obj) (append (mapped-windows obj) (list win))))) ;FIXME:which position to put
+      (1 (setf (mapped-windows obj) (sort-by-stacking-order (append (mapped-windows obj) (list win)) (screen obj))))) ;now the mapped-windows are in stacking order
     (unless (workspace-equal obj (current-workspace (screen win)))
       (unmap-workspace-window win))
     (if (null (current-window obj))
@@ -86,7 +86,7 @@
   (when (toplevel-p win)
     (setf (workspace win) nil)
     (setf (withdrawn-windows obj) (remove win (withdrawn-windows obj) :test #'window-equal))
-    (setf (mapped-windows obj) (remove win (mapped-windows obj) :test #'window-equal))
+    (setf (mapped-windows obj) (remove win (mapped-windows obj) :test #'window-equal)) ;remove doesn't break the stacking order
     (when (workspace-equal obj (current-workspace (screen win)))
       (unmap-workspace-window win))))
 
@@ -118,23 +118,28 @@
 (defun workspace-nwindows (workspace)
   (length (mapped-windows workspace)))
 
+;; FIXME:should we set input focus when raising or circulating window?
 (defmethod workspace-raise-window ((workspace workspace) (window window))
   (let ((windows (mapped-windows workspace)))
     (when (find window windows :test #'window-equal)
-      (setf (current-window workspace) window
-	    (mapped-windows workspace) (list* window (remove window windows :test #'window-equal)))
-      (raise-window window)
-      (set-input-focus window :parent))))
+      (let* ((id (id window))
+	     (screen workspace))
+	(setf (stacking-orderd screen) (append (remove id (stacking-orderd screen) :test #'=) (list id)))
+	(setf (current-window workspace) window
+	      (mapped-windows workspace) (sort-by-stacking-order windows screen))
+	(raise-window window)))))
 
 (defmethod workspace-next-window ((workspace workspace))
   (let ((windows (mapped-windows workspace)))
     (when (> (length windows) 1)
-      (let ((current (car windows))
-	    (next (cadr windows)))
-	(setf (mapped-windows workspace) (append (cdr windows) (list current))
-	      (current-window workspace) next)
-	(raise-window next)
-	(set-input-focus next :parent)))))
+      (let* ((current (last windows))
+	     (next (last (butlast windows)))
+	     (id (id (car current)))
+	     (screen (screen workspace)))
+	(setf (stacking-orderd screen) (list* id (remove id (stacking-orderd screen) :test #'=)))
+	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen)
+	      (current-window workspace) (car next))
+	(circulate-window-down (root screen))))))
 
 (defun next-window ()
   (workspace-next-window (current-workspace nil)))
@@ -142,11 +147,13 @@
 (defmethod workspace-prev-window ((workspace workspace))
   (let ((windows (mapped-windows workspace)))
     (when (> (length windows) 1)
-      (let ((prev (car (last windows))))
-	(setf (mapped-windows workspace) (list* prev (butlast windows))
+      (let* ((prev (first windows))
+	     (id (id prev))
+	     (screen (screen workspace)))
+	(setf (stacking-orderd screen) (append (remove id (stacking-orderd screen) :test #'=) (list id)))
+	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen)
 	      (current-window workspace) prev)
-	(raise-window prev)
-	(set-input-focus prev :parent)))))
+	(circulate-window-up (root screen))))))
 
 (defun prev-window ()
   (workspace-prev-window (current-workspace nil)))
