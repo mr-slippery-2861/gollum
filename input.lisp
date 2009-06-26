@@ -35,15 +35,17 @@
   (defun set-input-screen (s)
     (setf screen s))
   (defun submit-input ()
-    (setf (current-keymap (display screen)) :top-map)
-    (xlib:ungrab-keyboard (xdisplay (display screen)))
     (xlib:unmap-window (input-window screen))
     (flush-display (display screen))
+    (bordeaux-threads:condition-notify (input-cv screen)))
+  (defun cancel-input ()
+    (xlib:unmap-window (input-window screen))
+    (setf (input-buffer screen) nil)
     (bordeaux-threads:condition-notify (input-cv screen))))
 
 (defun bind-self-inserts (display &rest chars)
   (mapc (lambda (char)
-	  (bind-key :input-map (string char) (list 'self-insert char) display)) chars))
+	  (bind-key :input-map (string char) (list 'self-insert char) display t)) chars))
 
 (defun setup-input-map (display)
   (bind-self-inserts display
@@ -51,11 +53,11 @@
 		     #\A #\B #\C #\D #\E #\F #\G #\H #\I #\J #\K #\L #\M #\N #\O #\P #\Q #\R #\S #\T #\U #\V #\W #\X #\Y #\Z
 		     #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9 #\0
 		     #\! #\" #\# #\$ #\% #\& #\' #\( #\) #\* #\+ #\, #\. #\/ #\: #\; #\< #\= #\> #\? #\@ #\[ #\\ #\] #\^ #\_ #\` #\{ #\| #\} #\~)
-  (bind-key :input-map "C-g" :abort display)
-  (bind-key :input-map "minus" (list 'self-insert #\-) display) ;"-" is used as seperator in key-description
+  (bind-key :input-map "C-g" 'cancel-input display)
+  (bind-key :input-map "minus" (list 'self-insert #\-) display t) ;"-" is used as seperator in key-desc
   (bind-key :input-map "Return" 'submit-input display)
-  (bind-key :input-map "space" (list 'self-insert #\Space) display)
-  (bind-key :input-map "BackSpace" 'backward-delete display))
+  (bind-key :input-map "space" (list 'self-insert #\Space) display t)
+  (bind-key :input-map "BackSpace" 'backward-delete display t))
 
 (defun setup-input-window (screen prompt)
   (let* ((font (input-font screen))
