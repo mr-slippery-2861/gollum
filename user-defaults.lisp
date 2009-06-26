@@ -15,7 +15,7 @@
   (bind-key :root-map "F6" (list 'go-to-workspace 6) display)
   (bind-key :root-map "F7" (list 'go-to-workspace 7) display)
   (bind-key :root-map "F8" (list 'go-to-workspace 8) display)
-  (bind-key :window-map "C-g" :abort)
+  (bind-key :window-map "C-g" :abort display)
   (bind-key :window-map "M" 'maximize display)
   (bind-key :window-map "r" 'restore display))
 
