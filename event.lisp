@@ -112,14 +112,6 @@
 (define-event-handler :key-release ()
   t)
 
-(define-event-handler :button-press ()
-  (dformat 1 "button pressed")
-  t)
-
-(define-event-handler :button-release ()
-  (dformat 1 "button released")
-  t)
-
 (defun check-peek-event (xdisplay)
     (xlib:event-case (xdisplay :peek-p t :timeout nil)
       (t (event-key)
@@ -130,18 +122,28 @@
     (declare (ignore x y same-screen-p state-mask root-x root-y root))
     child))
 
+(define-event-handler :button-press (code window)
+  (let* ((dpy (xdisplay-display display))
+	 (xcurrent (pointer-current-xwindow window)))
+    (dformat 1 "button ~a pressed" code)
+    (when (and (= code 1) xcurrent)		;FIXME:should be customizable
+      (if (eql (check-peek-event display) :motion-notify)
+	  (set-drag-move-window (xwindow-window xcurrent dpy)))))
+  t)
+
+(define-event-handler :button-release ()
+  (dformat 1 "button released")
+  t)
+
 (define-event-handler :motion-notify (state window root-x root-y)
   (let* ((d (xdisplay-display display))
-	 (win (xwindow-window window d))
-	 (xcurrent (pointer-current-xwindow window)))
-    ;; (if (eql (check-peek-event display) :button-release)
-    ;; 	(drag-move-window win root-x root-y ))
-    (when xcurrent
-      (if (eql (check-peek-event display) :button-release)
-	  (drag-move-window (xwindow-window xcurrent d) root-x root-y)
-	  (drag-move-window (xwindow-window xcurrent d) root-x root-y :prompt t))
-      (dformat 1 "motion-notify, window ~a event-window ~a root-x ~a root-y ~a next-event ~a" (wm-name win) (wm-name (xwindow-window xcurrent d)) root-x root-y (check-peek-event display)))
-    )
+	 (win (xwindow-window window d)))
+    (if (eql (check-peek-event display) :button-release)
+	(progn
+	  (drag-move-window root-x root-y)
+	  (set-drag-move-window nil))
+	(drag-move-window root-x root-y :prompt t))
+    (dformat 1 "motion-notify, window ~a root-x ~a root-y ~a next-event ~a" (wm-name win) root-x root-y (check-peek-event display)))
   t)
 
 (define-event-handler :enter-notify (window mode kind)
@@ -211,6 +213,7 @@
     t))
 
 (define-event-handler :configure-request (window x y width height border-width stack-mode above-sibling value-mask)
+  (dformat 1 "configure-request received")
   (let* ((d (xdisplay-display display))
 	 (win (xwindow-window window d))
 	 (parent (parent win))
@@ -245,7 +248,7 @@
 	 (withdrawn (withdrawn-windows workspace))
 	 (mapped (mapped-windows workspace)))
     (setf (withdrawn-windows workspace) (remove window withdrawn :test #'window-equal)
-	  (mapped-windows workspace) (list* window mapped)))) ;FIXME:which position to put
+	  (mapped-windows workspace) (sort-by-stacking-order (list* window mapped) (screen workspace)))))
 
 (define-event-handler :map-request (window)
   (let* ((d (xdisplay-display display))
@@ -262,18 +265,6 @@
 	(map-window w))
     (flush-display d))
   t)
-
-(macroexpand-1 '(define-event-handler-2 (:map-request 'recover)
-  (let* ((d (xdisplay-display display))
-	 (w (xwindow-window window d))
-	 (ws (workspace w)))
-    (setf (ws-map-state w) :viewable)
-    (set-wm-state window 1)
-    (withdrawn-to-mapped w)
-    (when (workspace-equal (current-workspace (current-screen d)) ws)
-      (map-workspace-window w)
-      (flush-display d)))
-  t))
 
 (define-event-handler :resize-request (window width height)
   (let* ((d (xdisplay-display display))
