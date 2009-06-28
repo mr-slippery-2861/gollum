@@ -43,3 +43,6 @@
 
 (defun permanent-message (control-string &rest format-arguments)
   (screen-message (current-screen nil) (apply #'format nil control-string format-arguments) nil))
+
+(defun window-list (&optional workspace)
+  (screen-message (current-screen nil) (mapcar #'wm-name (list-windows (or workspace (current-workspace nil))))))
