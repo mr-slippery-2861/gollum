@@ -40,6 +40,8 @@
 (defgeneric schedule-timer (timer &optional time)
   (:documentation "TIME is in how many seconds TIMER will trigger, repeat time of TIMER if not provided."))
 
+(defgeneric cancel-timer (timer))
+
 (defgeneric run-timer (timer))
 
 (defmethod timer< ((timer1 timer) (timer2 timer))
@@ -69,6 +71,9 @@
 (defmethod schedule-timer ((timer message-timer) &optional (time +message-time-out+))
   (setf (real-time timer) (+ (get-internal-real-time) (* time internal-time-units-per-second)))
   (add-timer timer))
+
+(defmethod cancel-timer ((timer timer))
+  (delete-timer timer))
 
 (defmethod run-timer ((timer timer))
   (let ((time (get-internal-real-time))
