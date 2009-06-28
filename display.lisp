@@ -86,8 +86,9 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
       (let ((key (kbd-internal kbd (key-mod-map display))))
 	(multiple-value-bind (action exist-p) (gethash key (find-keymap keymap display))
 	  (if exist-p
-	      (let ((args (if (listp action) (cdr action) nil))
-		    (action (if (listp action) (car action) action)))
+	      (let* ((action (car action))
+		     (args (if (listp action) (cdr action) nil))
+		     (action (if (listp action) (car action) action)))
 		(cond ((command-p action) (return-from describe-key action))
 		      ((symbol->function action) (return-from describe-key action))
 		      ((keywordp action) (setf keymap action))
