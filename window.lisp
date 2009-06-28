@@ -46,7 +46,7 @@
    (protocols :initarg :protocols
 	      :accessor protocols
 	      :initform nil)
-   (group :initarg :group		;this is not the same as group in stumpwm at all!more like in starcraft
+   (group :initarg :group ;this is not the same as group in stumpwm at all!more like in starcraft
 	  :accessor group
 	  :initform nil)
    (toplevel-p :initarg :toplevel-p
@@ -86,7 +86,7 @@
 
 (defgeneric set-input-focus (focus &optional revert-to))
 
-(defgeneric match-window (win &key class name)
+(defgeneric match-window (win &key instance class name)
   (:documentation "return T if a window satisfies the description against match-type"))
 
 (defgeneric apply-place-rule (window place-rule))
@@ -186,10 +186,11 @@
   (if (current-window nil)
       (kill-window (current-window nil))))
 
-(defmethod match-window ((win window) &key class name)
+(defmethod match-window ((win window) &key instance class name)
   (and
-   (if (null class) t (string= (wm-class win) class))
-   (if (null name) t (string= (wm-name win) name))))
+   (if (null class) t (string= (wm-class window) class))
+   (if (null name) t (string= (wm-name window) name))
+   (if (null instance) t (string= (wm-instance window) instance))))
 
 (defun find-matching-window (all-windows &key class name)
   (loop for k being the hash-keys in all-windows using (hash-value v)
