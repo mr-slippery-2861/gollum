@@ -46,9 +46,14 @@
 	 finally (if last-cmd (setf commands (append commands (list (cons last-cmd-start last-cmd))))))
     (values raw-string commands)))
 
-(defun draw-substring (window gcontext x y string start end)
-  (if (> end start)
-      (xlib:draw-glyphs window gcontext x y (subseq string start end) :translate #'translate-id :size 16)))
+(defun draw-substring (window gcontext x y string start end &optional (reverse-p nil))
+  (when (> end start)
+    (if reverse-p
+	(let ((bg (xlib:gcontext-background gcontext))
+	      (fg (xlib:gcontext-foreground gcontext)))
+	  (xlib:with-gcontext (gcontext :foreground bg :background fg)
+	    (xlib:draw-image-glyphs window gcontext x y (subseq string start end) :translate #'translate-id :size 16)))
+	(xlib:draw-glyphs window gcontext x y (subseq string start end) :translate #'translate-id :size 16))))
 
 ;; FIXME:we share a single output-gc which may cause problems when two different threads access it
 (defun colorized-output (screen window content &optional (offset-y 0))
@@ -57,7 +62,8 @@
 	       (sb-int:invalid-array-index-error () nil)))
 	   (do-command (gc command)
 	     (let ((1st (unpack command 1))
-		   (2nd (unpack command 2)))
+		   (2nd (unpack command 2))
+		   (reverse-p nil))
 	       (case 1st
 		 (#\0 (setf (xlib:gcontext-foreground gc) (alloc-color "black" screen)))
 		 (#\1 (setf (xlib:gcontext-foreground gc) (alloc-color "red" screen)))
@@ -68,6 +74,9 @@
 		 (#\6 (setf (xlib:gcontext-foreground gc) (alloc-color "cyan" screen)))
 		 (#\7 (setf (xlib:gcontext-foreground gc) (alloc-color "white" screen)))
 		 (#\* (setf (xlib:gcontext-foreground gc) (alloc-color *foreground-color* screen)))
+		 (#\R (setf reverse-p :local))
+		 (#\| (setf reverse-p :global))
+		 (#\r nil)
 		 (t nil))
 	       (case 2nd
 		 (#\0 (setf (xlib:gcontext-background gc) (alloc-color "black" screen)))
@@ -79,7 +88,8 @@
 		 (#\6 (setf (xlib:gcontext-background gc) (alloc-color "cyan" screen)))
 		 (#\7 (setf (xlib:gcontext-background gc) (alloc-color "white" screen)))
 		 (#\* (setf (xlib:gcontext-background gc) (alloc-color *background-color* screen)))
-		 (t nil)))))
+		 (t nil))
+	       reverse-p)))
     (multiple-value-bind (raw-string commands) (parse-color-controling content)
       (let* ((gc (output-gc screen))
 	     (font (output-font screen))
@@ -87,20 +97,21 @@
 	     (end (if commands (caar commands) (length raw-string)))
 	     (total (1- (length commands)))
 	     (x *internal-window-horizontal-padding*)
-	     (y (+ offset-y *internal-window-vertical-padding* (xlib:font-ascent font))))
-	(setf (xlib:gcontext-foreground gc) (alloc-color *foreground-color* screen)
-	      (xlib:gcontext-background gc) (alloc-color *background-color* screen))
+	     (y (+ offset-y *internal-window-vertical-padding* (xlib:font-ascent font)))
+	     (reverse-p nil))
 	(loop for (next-start . command) in commands
 	   for current from 0 to total
 	   do (progn
-		(draw-substring window gc x y raw-string start end)
+		(draw-substring window gc x y raw-string start end reverse-p)
 		(setf x (+ (xlib:text-width font raw-string :start start :end end :translate #'translate-id) x)
 		      start next-start
 		      end (if (< current total)
 			      (car (elt commands (1+ current)))
-			      (length raw-string)))
-		(do-command gc command))
-	   finally (draw-substring window gc x y raw-string start end))))))
+			      (length raw-string))
+		      reverse-p (do-command gc command)))
+	   finally (draw-substring window gc x y raw-string start end reverse-p))
+	(setf (xlib:gcontext-foreground gc) (alloc-color *foreground-color* screen)
+	      (xlib:gcontext-background gc) (alloc-color *background-color* screen))))))
 
 (defmethod output-to-window ((screen screen) xwindow gravity content)
   "CONTENT is either a string or a list of string indicating multi-line drawing"
@@ -118,11 +129,13 @@
 (defmethod screen-message ((screen screen) message &optional (time-out-p t))
   (let ((message-window (message-window screen)))
     (output-to-window screen message-window *message-window-gravity* message)
-    (when time-out-p
-      (schedule-timer (message-timer screen)))))
+    (if time-out-p
+	(schedule-timer (message-timer screen))
+	(cancel-timer (message-timer screen)))))
 
 (defmethod screen-prompt-key ((screen screen) key-desc &optional (time-out-p nil))
   (let ((key-prompt-window (key-prompt-window screen)))
     (output-to-window screen key-prompt-window *key-prompt-window-gravity* key-desc)
-    (when time-out-p
-      (schedule-timer (key-prompt-timer screen)))))
+    (if time-out-p
+	(schedule-timer (key-prompt-timer screen))
+	(cancel-timer (key-prompt-timer screen)))))
