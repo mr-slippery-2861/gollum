@@ -244,36 +244,54 @@
 	     (declare (ignore id))
 	     (update-screen-window-geometry window)) (windows screen)))
 
+(defvar *toplevel-window-event* '(:focus-change
+				  :button-motion
+				  :enter-window
+				  :substructure-notify
+				  :substructure-redirect ))
 ;; this is lowerlevel function
-(defun manage-new-window (xwindow xparent screen)
+(defun manage-new-window (xwindow xroot screen)
   (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
     (let* ((map-state (xlib:window-map-state xwindow))
-	   (id (xlib:window-id xwindow))
-	   (win (make-instance 'window :id id :xwindow xwindow :map-state map-state :ws-map-state map-state
-			       :orig-width (width screen) :orig-height (height screen)))
-	   (pwin (xwindow-window xparent screen)) ;FIXME:what if we can not find the parent?
-	   (normal-hints (xlib:wm-normal-hints xwindow)))
-      (when (window-equal pwin (root screen))
-	(unless (eql (xlib:window-class xwindow) :input-only)
-	  (setf (xlib:window-border xwindow) (alloc-color *default-window-border* screen)
-		(xlib:drawable-border-width xwindow) *default-window-border-width*))
-	(setf (toplevel-p win) t
-	      (xlib:window-event-mask xwindow) '(:focus-change
-						 :button-motion
-						 :enter-window
-						 :structure-notify))
-	(setf (parent win) pwin
-	      (wm-name win) (xlib:wm-name xwindow)
-	      (wm-instance win) wm-instance
-	      (wm-class win) wm-class
-	      (protocols win) (xlib:wm-protocols xwindow)
-	      (orig-x win) (xlib:wm-size-hints-x normal-hints)
-	      (orig-y win) (xlib:wm-size-hints-y normal-hints)
-	      (orig-width win) (xlib:wm-size-hints-width normal-hints)
-	      (orig-height win) (xlib:wm-size-hints-height normal-hints))
-	(add-window win (display screen))
-	(add-window win screen)
-	(update-screen-window-geometry win)))))
+	   (normal-hints (xlib:wm-normal-hints xwindow))
+	   (x (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-x normal-hints))
+		  (xlib:drawable-x xwindow)))
+	   (y (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-y normal-hints))
+		  (xlib:drawable-y xwindow)))
+	   (width (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-width normal-hints))
+		      (xlib:drawable-width xwindow)))
+	   (height (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-height normal-hints))
+		       (xlib:drawable-height xwindow)))
+	   (xmaster (xlib:create-window :parent xroot
+					:x x
+					:y y
+					:width width
+					:height height
+					:border (alloc-color *default-window-border* screen)
+					:border-width *default-window-border-width*
+					:event-mask *toplevel-window-event*))
+	   (window (make-instance 'window
+				  :id (xlib:window-id xmaster)
+				  :xmaster xmaster
+				  :xwindow xwindow
+				  :map-state map-state
+				  :ws-map-state map-state
+				  :orig-x x
+				  :orig-y y
+				  :orig-width width
+				  :orig-height height))
+	   (pwindow (root screen)))
+      (setf (xlib:drawable-border-width xwindow) 0)
+      (xlib:reparent-window xwindow xmaster 0 0)
+      (setf (toplevel-p window) t
+	    (parent window) pwindow
+	    (wm-name window) (xlib:wm-name xwindow)
+	    (wm-instance window) wm-instance
+	    (wm-class window) wm-class
+	    (protocols window) (xlib:wm-protocols xwindow))
+      (add-window window (display screen))
+      (add-window window screen)
+      (update-screen-window-geometry window))))
 
 (defmethod manage-screen-root ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
