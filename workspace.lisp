@@ -37,10 +37,9 @@
 (defgeneric map-workspace (ws)
   (:documentation "map all the windows in a workspace"))
 
-(defgeneric list-workspace-windows (ws &key name class)
-  (:documentation "list the windows of the workspace"))
-
 (defgeneric list-windows (obj))
+
+(defgeneric find-matching-windows (obj &key instance class name))
 
 (defgeneric workspace-raise-window (workspace window))
 
@@ -105,12 +104,13 @@
 (defmethod unmap-workspace ((workspace workspace))
   (mapc #'unmap-workspace-window (mapped-windows workspace)))
 
-(defmethod list-workspace-windows ((ws workspace) &key (name t) class)
-  (let ((windows-list (mapped-windows ws)))
-    (mapcar (lambda (win) (list (and name (wm-name win)) (and class (wm-class win)))) windows-list)))
-
 (defmethod list-windows ((obj workspace))
   (mapped-windows obj))
+
+(defmethod find-matching-windows ((obj workspace) &key instance class name)
+  (let ((windows (mapped-windows obj)))
+    (remove-if-not (lambda (window)
+		     (match-window window :instance instance :class class :name name)) windows)))
 
 (defmethod current-window ((obj null))
   (current-window (current-workspace nil)))
