@@ -181,7 +181,7 @@
   (let* ((d (xdisplay-display display))
 	 (p (xwindow-window parent d))
 	 (s (screen p)))
-    (unless override-redirect-p
+    (unless (or override-redirect-p (not (window-equal p (root s)))) ;we ignore override-redirection window and non toplevel window
       (set-wm-state window 0)		;0 for withdrawn while 1 for normal
       (manage-new-window window parent s)))
   t)
