@@ -46,17 +46,17 @@
     (if *mode-line-layout*
 	(let* ((nchildren (length *mode-line-layout*))
 	       (total-width width)
-	       (cwidth (floor (/ total-width nchildren)))
+	       (cwidth nil)
 	       (x 0))
 	  (dolist (child *mode-line-layout*)
-	    (setf (gethash child (mode-line-children screen)) (xlib:create-window :parent mode-line
+	    (setf cwidth (floor (/ total-width nchildren))
+		  (gethash child (mode-line-children screen)) (xlib:create-window :parent mode-line
 										  :x x :y 0 :width cwidth :height height
 										  :override-redirect :on
 										  :save-under :on)
-		  nchildren (1- nchildren)
-		  x (+ x cwidth)
 		  total-width (- total-width cwidth)
-		  cwidth (floor (/ total-width nchildren))))))))
+		  nchildren (1- nchildren)
+		  x (+ x cwidth)))))))
 
 (defun show-mode-line (screen)
   (if (eql (xlib:window-map-state (mode-line screen)) :unmapped)
