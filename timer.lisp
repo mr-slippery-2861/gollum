@@ -78,10 +78,11 @@
 (defmethod run-timer ((timer timer))
   (let ((time (get-internal-real-time))
 	(repeat (repeat timer))
-	(action (action timer)))
+	(args (if (listp (action timer)) (cdr (action timer)) nil))
+	(action (if (listp (action timer)) (car (action timer)) (action timer))))
     (when (> time (real-time timer))
       (cond
-	((symbol->function action) (funcall (symbol->function action)))
+	((symbol->function action) (apply (symbol->function action) args))
 	((command-p action) (run-command action)))
       (if (numberp repeat)
 	  (setf (real-time timer) (+ (real-time timer) (* repeat internal-time-units-per-second)))
