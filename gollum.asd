@@ -22,6 +22,7 @@
 	       (:file "color")
 	       (:file "font")
 	       (:file "timer")
+	       (:file "mode-line")
 	       (:file "screen")
 	       (:file "error")
 	       (:file "display")
