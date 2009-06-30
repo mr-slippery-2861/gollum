@@ -262,17 +262,7 @@
 		      (xlib:drawable-width xwindow)))
 	   (height (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-height normal-hints))
 		       (xlib:drawable-height xwindow)))
-	   (xmaster (xlib:create-window :parent xroot
-					:x x
-					:y y
-					:width width
-					:height height
-					:border (alloc-color *default-window-border* screen)
-					:border-width *default-window-border-width*
-					:event-mask *toplevel-window-event*))
 	   (window (make-instance 'window
-				  :id (xlib:window-id xmaster)
-				  :xmaster xmaster
 				  :xwindow xwindow
 				  :map-state map-state
 				  :ws-map-state map-state
@@ -282,13 +272,27 @@
 				  :orig-height height))
 	   (pwindow (root screen)))
       (setf (xlib:drawable-border-width xwindow) 0)
-      (xlib:reparent-window xwindow xmaster 0 0)
+      (xlib:with-server-grabbed ((xdisplay (display screen)))
+	(let ((xmaster (xlib:create-window :parent xroot
+					   :x x
+					   :y y
+					   :width width
+					   :height height
+					   :border (alloc-color *default-window-border* screen)
+					   :border-width *default-window-border-width*
+					   :override-redirect :on
+					   :event-mask *toplevel-window-event*)))
+	  (xlib:reparent-window xwindow xmaster 0 0)
+	  (setf (xmaster window) xmaster
+		(xlib:window-override-redirect (xmaster window)) :off
+		(id window) (xlib:window-id xmaster))))
       (setf (toplevel-p window) t
 	    (parent window) pwindow
 	    (wm-name window) (xlib:wm-name xwindow)
 	    (wm-instance window) wm-instance
 	    (wm-class window) wm-class
 	    (protocols window) (xlib:wm-protocols xwindow))
+      (dformat 0 "new window: ~a" (xlib:window-id xwindow))
       (add-window window (display screen))
       (add-window window screen)
       (update-screen-window-geometry window))))
