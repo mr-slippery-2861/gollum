@@ -186,15 +186,15 @@
   (if (current-window nil)
       (kill-window (current-window nil))))
 
-(defmethod match-window ((win window) &key instance class name)
+(defmethod match-window ((window window) &key instance class name)
   (and
    (if (null class) t (string= (wm-class window) class))
    (if (null name) t (string= (wm-name window) name))
    (if (null instance) t (string= (wm-instance window) instance))))
 
-(defun find-matching-window (all-windows &key class name)
+(defun find-matching-window (all-windows &key instance class name)
   (loop for k being the hash-keys in all-windows using (hash-value v)
-     when (match-window v :class class :name name)
+     when (match-window v :instance instance :class class :name name)
      return v))
 
 (defmethod maximize-window ((window window))
