@@ -4,6 +4,9 @@
   ((id :initarg :id
        :accessor id
        :initform nil)
+   (xmaster :initarg :xmaster		;prepare for reparenting
+	    :accessor xmaster
+	    :initform nil)
    (xwindow :initarg :xwindow		;a xlib:window instance
 	    :accessor xwindow
 	    :initform nil)
@@ -52,7 +55,7 @@
    (toplevel-p :initarg :toplevel-p
 	       :accessor toplevel-p
 	       :initform nil)
-   (parent :initarg :parent
+   (parent :initarg :parent		;this slot seems no much use
 	   :accessor parent
 	   :initform nil)
    (map-state :initarg :map-state
