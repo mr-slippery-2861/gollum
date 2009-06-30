@@ -25,6 +25,15 @@
    (mode-line :initarg :mode-line
 	      :accessor mode-line
 	      :initform nil)
+   (mode-line-children :initarg :mode-line-children
+		       :accessor mode-line-children
+		       :initform (make-hash-table))
+   (mode-line-gc :initarg :mode-line-gc
+		 :accessor mode-line-gc
+		 :initform nil)
+   (mode-line-timer :initarg :mode-line-timer
+		    :accessor mode-line-timer
+		    :initform nil)
    (output-gc :initarg :output-gc
 	       :accessor output-gc
 	       :initform nil)
@@ -121,6 +130,8 @@
 
 (defgeneric list-workspaces (screen))
 
+(defgeneric output-to-window (screen xwindow gcontext gravity content))
+
 (defgeneric init-screen (screen))
 
 (defmethod make-internal-window ((s screen))
@@ -167,6 +178,13 @@
 	(remhash id (windows obj))
 	(setf (stacking-orderd obj) (remove id (stacking-orderd obj) :test #'=))))))
 
+(defmethod find-matching-windows ((obj screen) &key instance class name)
+  (remove-if #'null (mapcar (lambda (id)
+			      (let ((window (gethash id (windows obj))))
+				(if (match-window window :instance instance :class class :name name)
+				    window
+				    nil))) (stacking-orderd obj))))
+    
 (defmethod add-workspace-to-screen (name (screen screen))
   (or (find-workspace-by-name name (workspaces screen))
       (let* ((new-id (next-workspace-id (workspaces screen)))
@@ -200,8 +218,9 @@
       (min num1 num2)
       (or num1 num2)))
 
-(defun update-screen-window-geometry (window screen)
+(defun update-screen-window-geometry (window)
   (let* ((xwindow (xwindow window))
+	 (screen (screen window))
 	 (old-x (or (orig-x window) (xlib:drawable-x xwindow)))
 	 (old-y (or (orig-y window) (xlib:drawable-y xwindow)))
 	 (old-width (or (orig-width window) (xlib:drawable-width xwindow)))
@@ -219,6 +238,11 @@
 	  (orig-y window) new-y
 	  (orig-width window) new-width
 	  (orig-height window) new-height)))
+
+(defun update-screen-windows-geometry (screen)
+  (maphash (lambda (id window)
+	     (declare (ignore id))
+	     (update-screen-window-geometry window)) (windows screen)))
 
 ;; this is lowerlevel function
 (defun manage-new-window (xwindow xparent screen)
@@ -249,7 +273,7 @@
 	      (orig-height win) (xlib:wm-size-hints-height normal-hints))
 	(add-window win (display screen))
 	(add-window win screen)
-	(update-screen-window-geometry win screen)))))
+	(update-screen-window-geometry win)))))
 
 (defmethod manage-screen-root ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
@@ -282,24 +306,26 @@
 (defun calculate-geometry (screen xwindow gravity)
   (let* ((height (height screen))
 	 (width (width screen))
+	 (x (x screen))
+	 (y (y screen))
 	 (window-height (xlib:drawable-height xwindow))
 	 (window-width (xlib:drawable-width xwindow))
 	 (double-border (* 2 *internal-window-border-width*)))
     (case gravity
-      (:center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width) 2))
-		     (xlib:drawable-y xwindow) (floor (/ (- height window-height) 2))))
-      (:bottom-left (setf (xlib:drawable-x xwindow) 0
-			  (xlib:drawable-y xwindow) (- height window-height double-border)))
-      (:bottom-center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width double-border) 2))
-			    (xlib:drawable-y xwindow) (- height window-height double-border)))
-      (:bottom-right (setf (xlib:drawable-x xwindow) (- width window-width double-border)
-			   (xlib:drawable-y xwindow) (- height window-height double-border)))
-      (:top-left (setf (xlib:drawable-x xwindow) 0
-		       (xlib:drawable-y xwindow) 0))
-      (:top-center (setf (xlib:drawable-x xwindow) (floor (/ (- width window-width double-border) 2))
-			 (xlib:drawable-y xwindow) 0))
-      (:top-right (setf (xlib:drawable-x xwindow) (- width window-width double-border)
-			(xlib:drawable-y xwindow) 0))
+      (:center (setf (xlib:drawable-x xwindow) (+ x (floor (/ (- width window-width) 2)))
+		     (xlib:drawable-y xwindow) (+ y (floor (/ (- height window-height) 2)))))
+      (:bottom-left (setf (xlib:drawable-x xwindow) x
+			  (xlib:drawable-y xwindow) (+ y (- height window-height double-border))))
+      (:bottom-center (setf (xlib:drawable-x xwindow) (+ x (floor (/ (- width window-width double-border) 2)))
+			    (xlib:drawable-y xwindow) (+ y (- height window-height double-border))))
+      (:bottom-right (setf (xlib:drawable-x xwindow) (+ x (- width window-width double-border))
+			   (xlib:drawable-y xwindow) (+ y (- height window-height double-border))))
+      (:top-left (setf (xlib:drawable-x xwindow) x
+		       (xlib:drawable-y xwindow) y))
+      (:top-center (setf (xlib:drawable-x xwindow) (+ x (floor (/ (- width window-width double-border) 2)))
+			 (xlib:drawable-y xwindow) y))
+      (:top-right (setf (xlib:drawable-x xwindow) (+ x (- width window-width double-border))
+			(xlib:drawable-y xwindow) y))
       (:pointer (multiple-value-bind (x y) (xlib:query-pointer (xwindow (root screen)))
 		  (setf (xlib:drawable-x xwindow) x
 			(xlib:drawable-y xwindow) y))))))
@@ -311,13 +337,14 @@
 	 (height (* (length content) (+ ascent descent)))
 	 (width (apply #'max (mapcar (lambda (line)
 				       (xlib:text-width font line :translate #'translate-id)) content))))
-    (xlib:with-state (xwindow)
-      (if (eql (xlib:window-map-state xwindow) :unmapped)
-	  (xlib:map-window xwindow))
-      (setf (xlib:drawable-height xwindow) (+ (* 2 *internal-window-vertical-padding*) height)
-	    (xlib:drawable-width xwindow) (+ (* 2 *internal-window-horizontal-padding*) width)
-	    (xlib:window-priority xwindow) :top-if)
-      (calculate-geometry screen xwindow gravity))
+    (unless (eql gravity :keep)
+      (xlib:with-state (xwindow)
+	(if (eql (xlib:window-map-state xwindow) :unmapped)
+	    (xlib:map-window xwindow))
+	(setf (xlib:drawable-height xwindow) (+ (* 2 *internal-window-vertical-padding*) height)
+	      (xlib:drawable-width xwindow) (+ (* 2 *internal-window-horizontal-padding*) width)
+	      (xlib:window-priority xwindow) :top-if)
+	(calculate-geometry screen xwindow gravity)))
     (xlib:with-gcontext (gcontext :foreground (xlib:gcontext-background gcontext))
       (xlib:draw-rectangle xwindow gcontext 0 0 (xlib:drawable-width xwindow) (xlib:drawable-height xwindow) t))))
 
@@ -337,7 +364,8 @@
 (defmethod list-workspaces ((screen screen))
   (let ((workspaces nil))
     (maphash (lambda (id workspace)
-	       (setf workspaces (append workspaces (list (list id workspace))))) (workspaces screen))
+	       (declare (ignore id))
+	       (setf workspaces (append workspaces (list workspace)))) (workspaces screen))
     workspaces))
 
 (defun create-gcontext (xwin bg fg font)
@@ -352,6 +380,12 @@
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
   (manage-existing-windows screen)
   (setf (mode-line screen) (make-internal-window screen)
+	(mode-line-gc screen) (create-gcontext (mode-line screen)
+					       (alloc-color *mode-line-background* screen)
+					       (alloc-color *mode-line-foreground* screen)
+					       (output-font screen))
+	(mode-line-timer screen) (make-timer (list 'update-mode-line screen)
+					     0.5)
 	(output-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
@@ -384,6 +418,7 @@
 						    :line-style :dash
 						    :line-width 1
 						    :subwindow-mode :clip-by-children))
+  (init-mode-line screen)
   (xlib:grab-button (xwindow (root screen)) 1 '(:button-motion :button-release) ;FIXME:should be customizable
 		    :modifiers (list (key->mod :alt (key-mod-map (display screen))))
 		    :owner-p nil
