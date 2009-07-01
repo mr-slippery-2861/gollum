@@ -106,8 +106,8 @@
 	 (keysym (code-state->keysym code state d))
 	 (key (key->hash (filt-state state) keysym))) ;FIME:we simply filt :shift out
     (unless (find code (mod-keycodes d))
-      (do-bind key window d))
-    t))
+      (do-bind key window d)))
+  t)
 
 (define-event-handler :key-release ()
   t)
@@ -219,29 +219,35 @@
   (let* ((d (xdisplay-display display))
 	 (pwin (xwindow-window parent d))
 	 (screen (screen pwin)))
-    (multiple-value-bind (root-x root-y dst-child) (translate-coordinates parent x y (root screen))
+    (multiple-value-bind (root-x root-y dst-child) (translate-coordinates pwin x y (root screen))
       (let* ((x-p (plusp (logand value-mask 1)))
 	     (y-p (plusp (logand value-mask 2)))
 	     (width-p (plusp (logand value-mask 4)))
 	     (height-p (plusp (logand value-mask 8)))
+	     (double-border (* 2 *default-window-border-width*))
 ;	 (border-width-p (plusp (logand value-mask 16)))
-	     (new-x (if x-p (max root-x (x screen)) (orig-x win)))
-	     (new-y (if y-p (max root-y (y screen)) (orig-y win)))
-	     (new-width (if width-p (min width (width screen)) (orig-width win)))
-	     (new-height (if height-p (min height (height screen)) (orig-height win))))
+	     (new-x (if x-p (max root-x (x screen)) (orig-x pwin)))
+	     (new-y (if y-p (max root-y (y screen)) (orig-y pwin)))
+	     (new-width (if width-p (min width (- (width screen) double-border)) (orig-width pwin)))
+	     (new-height (if height-p (min height (- (height screen) double-border)) (orig-height pwin))))
 ;	(stack-mode-p (plusp (logand value-mask 32)))
 ;	(above-sibling-p (plusp (logand value-mask 64))))
 	(when (not (maximized win))
 	  (xlib:with-state (window)		;FIXME:check the geometric first
-	    (if x-p (setf (xlib:drawable-x window) new-x))
-	    (if y-p (setf (xlib:drawable-y window) new-y))
+	    (if x-p (setf (xlib:drawable-x window) (+ new-x *default-window-border-width*)))
+	    (if y-p (setf (xlib:drawable-y window) (+ new-y *default-window-border-width*)))
 	    (if width-p (setf (xlib:drawable-width window) new-width))
 	    (if height-p (setf (xlib:drawable-height window) new-height)))
+	  (xlib:with-state (parent)
+	    (if x-p (setf (xlib:drawable-x parent) new-x))
+	    (if y-p (setf (xlib:drawable-y parent) new-y))
+	    (if width-p (setf (xlib:drawable-width parent) new-width))
+	    (if height-p (setf (xlib:drawable-height parent) new-height)))
 	  (xlib:display-finish-output display))
-	(setf (orig-x win) new-x
-	      (orig-y win) new-y
-	      (orig-width win) new-width
-	      (orig-height win) new-height))))
+	(setf (orig-x pwin) new-x
+	      (orig-y pwin) new-y
+	      (orig-width pwin) new-width
+	      (orig-height pwin) new-height))))
   t)
 
 (defun withdrawn-to-mapped (window)
