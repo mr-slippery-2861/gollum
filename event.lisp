@@ -186,10 +186,11 @@
       (manage-new-window window parent s)))
   t)
 
-(define-event-handler :destroy-notify (parent window)
+(define-event-handler :destroy-notify (event-window window)
   (let* ((d (xdisplay-display display))
-	 (w (xwindow-window parent d)))
-    (unless (xlib:window-equal parent (xlib:drawable-root window))
+	 (w (xwindow-window event-window d)))
+    ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
+    (unless (window-equal w (root (screen w)))
       (delete-window w d)))
   t)
 
@@ -213,12 +214,11 @@
 	 (w (xwindow-window window d)))
     t))
 
-(define-event-handler :configure-request (window x y width height border-width stack-mode above-sibling value-mask)
+(define-event-handler :configure-request (parent window x y width height border-width stack-mode above-sibling value-mask)
   (dformat 1 "configure-request received")
   (let* ((d (xdisplay-display display))
-	 (win (xwindow-window window d))
-	 (parent (parent win))
-	 (screen (screen win)))
+	 (pwin (xwindow-window parent d))
+	 (screen (screen pwin)))
     (multiple-value-bind (root-x root-y dst-child) (translate-coordinates parent x y (root screen))
       (let* ((x-p (plusp (logand value-mask 1)))
 	     (y-p (plusp (logand value-mask 2)))
@@ -272,6 +272,7 @@
 	 (screen (screen win))
 	 (actual-width (min (width screen) width))
 	 (actual-height (min (height screen) height)))
+    (dformat 1 "resize-request received")
     (xlib:with-state (window)
       (setf (xlib:drawable-width window) actual-width
 	    (xlib:drawable-height window) actual-height))
