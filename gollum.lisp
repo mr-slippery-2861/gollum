@@ -26,7 +26,8 @@
     (load-rc)
     (init-display-bottom-half (current-display))
     (setf *event-threads* (bordeaux-threads:make-thread #'event-processor :name "event-processor"))
-    (setf *timer-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))))
+    (setf *timer-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))
+    (bordeaux-threads:join-thread *timer-threads*)))
 
 (defun gollum-quit ()
   (bordeaux-threads:destroy-thread *event-threads*)
