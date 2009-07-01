@@ -272,6 +272,7 @@
 				  :orig-height height))
 	   (pwindow (root screen)))
       (setf (xlib:drawable-border-width xwindow) 0)
+      (dformat 1 "prepare to grab server")
       (xlib:with-server-grabbed ((xdisplay (display screen)))
 	(let ((xmaster (xlib:create-window :parent xroot
 					   :x x
@@ -284,6 +285,7 @@
 					   :event-mask *toplevel-window-event*)))
 	  (setf (xlib:window-override-redirect xmaster) :off)
 	  (set-wm-state xmaster (case (xlib:window-map-state xwindow) (:unmapped 0) (:viewable 1)))
+	  (dformat 1 "prepare to reparent")
 	  (xlib:reparent-window xwindow xmaster 0 0)
 	  (setf (xmaster window) xmaster
 		(id window) (xlib:window-id xmaster))))
