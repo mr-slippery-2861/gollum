@@ -56,7 +56,8 @@
 										  :save-under :on)
 		  total-width (- total-width cwidth)
 		  nchildren (1- nchildren)
-		  x (+ x cwidth)))))))
+		  x (+ x cwidth))
+	    (xlib:map-window (gethash child (mode-line-children screen))))))))
 
 (defun show-mode-line (screen)
   (if (eql (xlib:window-map-state (mode-line screen)) :unmapped)
