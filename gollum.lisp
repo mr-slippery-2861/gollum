@@ -19,7 +19,7 @@
 	      ((= colon-1 colon-2) :tcp)
 	      (t :dna)))))
 
-(defun gollum (display-name)
+(defun gollum (display-name &optional (debug nil))
   (multiple-value-bind (host display screen protocol) (parse-display-name display-name)
     (declare (ignore screen))
     (init-display-top-half (open-display host :display display :protocol protocol))
@@ -27,7 +27,8 @@
     (init-display-bottom-half (current-display))
     (setf *event-threads* (bordeaux-threads:make-thread #'event-processor :name "event-processor"))
     (setf *timer-threads* (bordeaux-threads:make-thread #'timers-runner :name "timers-runner"))
-    (bordeaux-threads:join-thread *timer-threads*)))
+    (unless debug
+      (bordeaux-threads:join-thread *timer-threads*))))
 
 (defun gollum-quit ()
   (bordeaux-threads:destroy-thread *event-threads*)
