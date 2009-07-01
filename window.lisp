@@ -129,23 +129,23 @@
 
 (defmethod map-workspace-window ((win window))
   (when (and (plusp (get-wm-state win)) (should-be-mapped win) (not-mapped win))
-    (xlib:map-window (xwindow win))
+    (xlib:map-window (xmaster win))
     (setf (map-state win) :viewable)))
 
 (defmethod map-window ((win window))
   (when (eql (map-state win) :unmapped)
-    (xlib:map-window (xwindow win))
+    (xlib:map-window (xmaster win))
     (setf (map-state win) :viewable))
   (setf (ws-map-state win) :viewable))
 
 (defmethod unmap-workspace-window ((win window))
   (when (mapped win)
-    (xlib:unmap-window (xwindow win))
+    (xlib:unmap-window (xmaster win))
     (setf (map-state win) :unmapped)))
 
 (defmethod unmap-window ((win window))
   (when (eql (map-state win) :viewable)
-    (xlib:unmap-window (xwindow win))
+    (xlib:unmap-window (xmaster win))
     (setf (map-state win) :unmapped))
   (setf (ws-map-state win) :unmapped))
 
@@ -153,13 +153,13 @@
   (= (id w1) (id w2)))
 
 (defmethod raise-window ((win window))
-    (setf (xlib:window-priority (xwindow win)) :top-if))
+    (setf (xlib:window-priority (xmaster win)) :top-if))
 
 (defmethod circulate-window-down ((window window))
-  (xlib:circulate-window-down (xwindow window)))
+  (xlib:circulate-window-down (xmaster window)))
 
 (defmethod circulate-window-up ((window window))
-  (xlib:circulate-window-up (xwindow window)))
+  (xlib:circulate-window-up (xmaster window)))
 
 ;; Input Model 	        Input Field 	WM_TAKE_FOCUS
 ;; No Input 	        False 	        Absent             we are not needed to set
@@ -174,7 +174,7 @@
 
 (defmethod set-input-focus ((focus window) &optional (revert-to :parent))
   (if (input-field focus)
-      (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to)))
+      (xlib:set-input-focus (xdisplay (display focus)) (xmaster focus) revert-to)))
 
 (defun kill-window (window)
   (let ((display (display window)))
@@ -183,7 +183,7 @@
 			                                      :type :WM_PROTOCOLS
 							      :format 32
 							      :data (list (xlib:intern-atom (xdisplay display) :WM_DELETE_WINDOW)))
-	(xlib:kill-client (xdisplay display) (id window)))))
+	(xlib:kill-client (xdisplay display) (xlib:window-id (xwindow window))))))
 
 (defun kill ()
   (if (current-window nil)
@@ -202,13 +202,17 @@
 
 (defmethod maximize-window ((window window))
   (let* ((screen (screen window))
-	 (max-width (width screen))
-	 (max-height (height screen))
+	 (max-width (- (width screen) (* 2 *default-window-border-width*)))
+	 (max-height (- (height screen) (* 2 *default-window-border-width*)))
+	 (xmaster (xmaster window))
 	 (xwindow (xwindow window)))
+    (xlib:with-state (xmaster)
+      (setf (xlib:drawable-x xmaster) (x screen)
+	    (xlib:drawable-y xmaster) (y screen)
+	    (xlib:drawable-width xmaster) max-width
+	    (xlib:drawable-height xmaster) max-height))
     (xlib:with-state (xwindow)
-      (setf (xlib:drawable-x xwindow) (x screen)
-	    (xlib:drawable-y xwindow) (y screen)
-	    (xlib:drawable-width xwindow) max-width
+      (setf (xlib:drawable-width xwindow) max-width
 	    (xlib:drawable-height xwindow) max-height))
     (setf (size-state window) :maximized)
     (flush-display (display window))))
@@ -225,11 +229,15 @@
 	 (y (orig-y window))
 	 (width (orig-width window))
 	 (height (orig-height window))
+	 (xmaster (xmaster window))
 	 (xwindow (xwindow window)))
+    (xlib:with-state (xmaster)
+      (setf (xlib:drawable-x xmaster) x
+	    (xlib:drawable-y xmaster) y
+	    (xlib:drawable-width xmaster) width
+	    (xlib:drawable-height xmaster) height))
     (xlib:with-state (xwindow)
-      (setf (xlib:drawable-x xwindow) x
-	    (xlib:drawable-y xwindow) y
-	    (xlib:drawable-width xwindow) width
+      (setf (xlib:drawable-width xwindow) width
 	    (xlib:drawable-height xwindow) height))
     (setf (size-state window) :normal)
     (flush-display (display window))))
@@ -261,21 +269,21 @@
 	       (max-x (+ min-x (width screen)))
 	       (max-y (+ min-y (height screen)))
 	       (gc (configure-gc screen))
-	       (xwindow (xwindow target-window))
+	       (xmaster (xmaster target-window))
 	       (xroot (xwindow (root screen)))
-	       (current-x (xlib:drawable-x xwindow))
-	       (current-y (xlib:drawable-y xwindow))
+	       (current-x (xlib:drawable-x xmaster))
+	       (current-y (xlib:drawable-y xmaster))
 	       (new-x (second (sort (list min-x (+ current-x offset-x) max-x) #'<)))
 	       (new-y (second (sort (list min-y (+ current-y offset-y) max-y) #'<))))
 	  (if prompt
-	      (let ((width (xlib:drawable-width xwindow))
-		    (height (xlib:drawable-height xwindow)))
+	      (let ((width (xlib:drawable-width xmaster))
+		    (height (xlib:drawable-height xmaster)))
 		(xlib:clear-area xroot)
 		(xlib:draw-lines xroot gc (list new-x new-y width 0 0 height (- width) 0 0 (- height)) :relative-p t))
 	      (progn
-		(xlib:with-state (xwindow)
-		  (setf (xlib:drawable-x xwindow) new-x
-			(xlib:drawable-y xwindow) new-y))
+		(xlib:with-state (xmaster)
+		  (setf (xlib:drawable-x xmaster) new-x
+			(xlib:drawable-y xmaster) new-y))
 		(setf (orig-x target-window) new-x
 		      (orig-y target-window) new-y)
 		(calculate-move-offsets nil nil)
@@ -283,22 +291,22 @@
 	  (flush-display (display screen)))))))
 
 (defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
-  (xlib:grab-key (xwindow win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
+  (xlib:grab-key (xmaster win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
 (defmethod ungrab-key ((window window) keycode &key (modifiers 0))
-  (xlib:ungrab-key (xwindow window) keycode :modifiers modifiers))
+  (xlib:ungrab-key (xmaster window) keycode :modifiers modifiers))
 
 (defmethod grab-keyboard ((win window) &key owner-p sync-pointer-p sync-keyboard-p)
-  (xlib:grab-keyboard (xwindow win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
+  (xlib:grab-keyboard (xmaster win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
 (defun get-wm-state (window)
-  (car (xlib:get-property (xwindow window) :WM_STATE)))
+  (car (xlib:get-property (xmaster window) :WM_STATE)))
 
 (defun set-wm-state (xwindow state)
   (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
 
 (defun translate-coordinates (src src-x src-y dst)
-  (xlib:translate-coordinates (xwindow src) src-x src-y (xwindow dst)))
+  (xlib:translate-coordinates (xmaster src) src-x src-y (xmaster dst)))
 
 (defvar *default-window-border* "green")
 
