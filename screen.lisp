@@ -206,7 +206,7 @@
   "XWIN is an xlib window,we find the corresponding window."
   (when xwin
     (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
-      (and exist-p (xlib:window-equal xwin (xwindow win)) win))))
+      (and exist-p (xlib:window-equal xwin (xmaster win)) win))))
 
 (defun max-or (num1 num2)
   (if (and num1 num2)
@@ -219,21 +219,21 @@
       (or num1 num2)))
 
 (defun update-screen-window-geometry (window)
-  (let* ((xwindow (xwindow window))
+  (let* ((xmaster (xmaster window))
 	 (screen (screen window))
-	 (old-x (or (orig-x window) (xlib:drawable-x xwindow)))
-	 (old-y (or (orig-y window) (xlib:drawable-y xwindow)))
-	 (old-width (or (orig-width window) (xlib:drawable-width xwindow)))
-	 (old-height (or (orig-height window) (xlib:drawable-height xwindow)))
+	 (old-x (or (orig-x window) (xlib:drawable-x xmaster)))
+	 (old-y (or (orig-y window) (xlib:drawable-y xmaster)))
+	 (old-width (or (orig-width window) (xlib:drawable-width xmaster)))
+	 (old-height (or (orig-height window) (xlib:drawable-height xmaster)))
 	 (new-x (max old-x (x screen)))
 	 (new-y (max old-y (y screen)))
 	 (new-width (min old-width (width screen)))
 	 (new-height (min old-height (height screen))))
-    (xlib:with-state (xwindow)
-      (setf (xlib:drawable-x xwindow) new-x
-	    (xlib:drawable-y xwindow) new-y
-	    (xlib:drawable-width xwindow) new-width
-	    (xlib:drawable-height xwindow) new-height))
+    (xlib:with-state (xmaster)
+      (setf (xlib:drawable-x xmaster) new-x
+	    (xlib:drawable-y xmaster) new-y
+	    (xlib:drawable-width xmaster) new-width
+	    (xlib:drawable-height xmaster) new-height))
     (setf (orig-x window) new-x
 	  (orig-y window) new-y
 	  (orig-width window) new-width
@@ -264,7 +264,7 @@
 		       (xlib:drawable-height xwindow)))
 	   (window (make-instance 'window
 				  :xwindow xwindow
-				  :map-state map-state
+				  :map-state :unmapped
 				  :ws-map-state map-state
 				  :orig-x x
 				  :orig-y y
@@ -282,9 +282,10 @@
 					   :border-width *default-window-border-width*
 					   :override-redirect :on
 					   :event-mask *toplevel-window-event*)))
+	  (setf (xlib:window-override-redirect xmaster) :off)
+	  (set-wm-state xmaster (case (xlib:window-map-state xwindow) (:unmapped 0) (:viewable 1)))
 	  (xlib:reparent-window xwindow xmaster 0 0)
 	  (setf (xmaster window) xmaster
-		(xlib:window-override-redirect (xmaster window)) :off
 		(id window) (xlib:window-id xmaster))))
       (setf (toplevel-p window) t
 	    (parent window) pwindow
@@ -297,11 +298,14 @@
       (add-window window screen)
       (update-screen-window-geometry window))))
 
+(defvar *root-event* '(:focus-change :button-motion :substructure-notify))
+
 (defmethod manage-screen-root ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
 	 (root-id (xlib:window-id xroot))
 	 (root (make-instance 'window
 			      :id root-id
+			      :xmaster xroot
 			      :xwindow xroot
 			      :screen screen
 			      :display (display screen)
@@ -312,17 +316,13 @@
     (setf (gethash root-id (windows screen)) root
 	  (gethash root-id (windows (display screen))) root
 	  (root screen) root
-	  (xlib:window-event-mask (xwindow (root screen))) '(:focus-change
-							     :button-motion
-							     :substructure-notify
-							     :substructure-redirect))))
+	  (xlib:window-event-mask (xwindow (root screen))) *root-event*)))
 
 (defmethod manage-existing-windows ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
 	 (window-list (xlib:query-tree xroot))) ;from bottom-most (first) to top-most (last)
     (dolist (win window-list)
       (unless (eql :on (xlib:window-override-redirect win))
-	(set-wm-state win (case (xlib:window-map-state win) (:unmapped 0) (:viewable 1)))
 	(manage-new-window win xroot screen)))))
 
 (defun calculate-geometry (screen xwindow gravity)
