@@ -181,15 +181,16 @@
   (let* ((d (xdisplay-display display))
 	 (p (xwindow-window parent d))
 	 (s (screen p)))
-    (unless (or override-redirect-p (not (window-equal p (root s)))) ;we ignore override-redirection window and non toplevel window
-      (set-wm-state window 0)		;0 for withdrawn while 1 for normal
+    (dformat 1 "create-notify received, window ~a" (xlib:wm-name window))
+    (unless (or override-redirect-p (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
       (manage-new-window window parent s)))
   t)
 
-(define-event-handler :destroy-notify (window)
+(define-event-handler :destroy-notify (parent window)
   (let* ((d (xdisplay-display display))
-	 (w (xwindow-window window d)))
-    (delete-window w d))
+	 (w (xwindow-window parent d)))
+    (unless (xlib:window-equal parent (xlib:drawable-root window))
+      (delete-window w d)))
   t)
 
 (define-event-handler :gravity-notify ()
@@ -250,20 +251,19 @@
     (setf (withdrawn-windows workspace) (remove window withdrawn :test #'window-equal)
 	  (mapped-windows workspace) (sort-by-stacking-order (list* window mapped) (screen workspace)))))
 
-(define-event-handler :map-request (window)
+(define-event-handler :map-request (parent window)
   (let* ((d (xdisplay-display display))
-	 (w (xwindow-window window d))
+	 (w (xwindow-window parent d))
 	 (ws (workspace w)))
     (dformat 1 "map-request received,window ~a" (wm-name w))
-    (if (toplevel-p w)
-	(progn
-	  (setf (ws-map-state w) :viewable)
-	  (set-wm-state window 1)		;1 for normal
-	  (withdrawn-to-mapped w)
-	  (when (workspace-equal (current-workspace (current-screen d)) ws)
-	    (map-workspace-window w)))
-	(map-window w))
-    (flush-display d))
+    (unless (xlib:window-equal (xmaster w) (xlib:drawable-root window))
+      (xlib:map-window window)
+      (setf (ws-map-state w) :viewable)
+      (set-wm-state parent 1)		;1 for normal
+      (withdrawn-to-mapped w)
+      (when (workspace-equal (current-workspace (current-screen d)) ws)
+	(map-workspace-window w))
+      (flush-display d)))
   t)
 
 (define-event-handler :resize-request (window width height)
