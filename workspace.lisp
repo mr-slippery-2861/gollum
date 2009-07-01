@@ -76,8 +76,9 @@
     (case (get-wm-state win)
       (0 (push win (withdrawn-windows obj)))
       (1 (setf (mapped-windows obj) (sort-by-stacking-order (append (mapped-windows obj) (list win)) (screen obj))))) ;now the mapped-windows are in stacking order
-    (unless (workspace-equal obj (current-workspace (screen win)))
-      (unmap-workspace-window win))
+    (if (workspace-equal obj (current-workspace (screen win)))
+	(map-workspace-window win)
+	(unmap-workspace-window win))
     (if (null (current-window obj))
 	(setf (current-window obj) win))))
 
