@@ -218,7 +218,7 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
 
 (defmethod xwindow-window (xwin (obj display))
   (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
-    (if (and exist-p (xlib:window-equal xwin (xwindow win)))
+    (if (and exist-p (xmaster win) (xlib:window-equal xwin (xmaster win)))
 	win
 	(error 'no-such-window :xwindow xwin))))
 
@@ -231,6 +231,7 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
 	(id (id win)))
     (setf (map-state win) :unmapped)
     (delete-window win screen)
+    (xlib:destroy-window (xmaster win))
     (multiple-value-bind (w exist-p) (gethash id (windows obj))
       (declare (ignore w))
       (when exist-p
