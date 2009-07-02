@@ -172,6 +172,7 @@
   t)
 
 (define-event-handler :create-notify (window parent override-redirect-p)
+  (dformat 1 "window ~a parent ~a" (xlib:window-id window) (xlib:window-id parent))
   (let* ((p (xwindow-window parent *display*))
 	 (s (screen p)))
     (dformat 1 "create-notify received, window ~a or ~a parent ~a" (xlib:wm-name window) (xlib:window-override-redirect window) (xlib:window-id parent))
@@ -186,7 +187,7 @@
     ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
     (unless (window-equal w (root (screen w)))
       (dformat 1 "about to delete window")
-      (delete-window w d)))
+      (delete-window w *display*)))
   t)
 
 (define-event-handler :gravity-notify ()
