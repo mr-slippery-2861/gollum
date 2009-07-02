@@ -17,7 +17,7 @@
 		      :accessor withdrawn-windows
 		      :initform nil)
    (current-window :initarg :current-window
-		   :accessor current-window
+		   :accessor workspace-current-window
 		   :initform nil)))
 
 (defgeneric add-window (win obj))
