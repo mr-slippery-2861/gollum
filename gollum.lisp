@@ -1,10 +1,10 @@
 (in-package :gollum)
 
-(defvar *event-threads* nil)
+(defvar *event-thread* nil)
 
 ;; (bordeaux-threads:make-thread #'thread-test :name "test" :initial-bindings '((what . :this)))
 
-(defvar *timer-threads* nil)
+(defvar *timer-thread* nil)
 
 (defun parse-display-name (display-name)
   (let* ((colon-1 (position #\: display-name))
@@ -35,6 +35,6 @@
 	(bordeaux-threads:join-thread *timer-thread*))))
 
 (defun gollum-quit ()
-  (and (bordeaux-threads:thread-alive-p *event-thread*) (bordeaux-threads:destroy-thread *event-threads*))
-  (and (bordeaux-threads:thread-alive-p *timer-thread*) (bordeaux-threads:destroy-thread *timer-threads*))
+  (and (bordeaux-threads:thread-alive-p *event-thread*) (bordeaux-threads:destroy-thread *event-thread*))
+  (and (bordeaux-threads:thread-alive-p *timer-thread*) (bordeaux-threads:destroy-thread *timer-thread*))
   (close-display *display*))
