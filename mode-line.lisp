@@ -82,7 +82,7 @@
 	(cancel-timer (mode-line-timer screen)))))
 
 (defun toggle-mode-line (&optional screen)
-  (let* ((screen (or screen (current-screen nil)))
+  (let* ((screen (or screen (current-screen)))
 	 (mode-line (mode-line screen)))
     (if (eql (xlib:window-map-state mode-line) :viewable)
 	(hide-mode-line screen)
