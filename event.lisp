@@ -45,7 +45,8 @@
 (defmacro define-event-handler (event-key actual-keys &body body)
   (let ((fn-name (gensym)))
     `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
-		(declare (ignore event-slots))
+		(declare (ignore display event-slots))
+		(dformat 1 "get into ~a" ,event-key)
 		(handler-case (progn ,@body)
 		  (no-such-window () t))))
        (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
@@ -74,8 +75,7 @@
 
 (define-event-handler :focus-in (window mode kind)
   (unless (find kind '(:pointer :virtual :nonlinear-virtual))
-    (let* ((d (xdisplay-display display))
-	   (win (xwindow-window window d))
+    (let* ((win (xwindow-window window *display*))
 	   (top (find-toplevel win))
 	   (screen (screen top))
 	   (workspace (current-workspace screen)))
@@ -102,11 +102,10 @@
     (apply #'xlib:make-state-mask mods)))
 
 (define-event-handler :key-press (code state window)
-  (let* ((d (xdisplay-display display))
-	 (keysym (code-state->keysym code state d))
+  (let* ((keysym (code-state->keysym code state *display*))
 	 (key (key->hash (filt-state state) keysym))) ;FIME:we simply filt :shift out
-    (unless (find code (mod-keycodes d))
-      (do-bind key window d)))
+    (unless (find code (mod-keycodes *display*))
+      (do-bind key window *display*)))
   t)
 
 (define-event-handler :key-release ()
@@ -123,21 +122,18 @@
     child))
 
 (define-event-handler :button-press (code window)
-  (let* ((dpy (xdisplay-display display))
-	 (xcurrent (pointer-current-xwindow window)))
+  (let ((xcurrent (pointer-current-xwindow window)))
     (dformat 1 "button ~a pressed" code)
     (when (and (= code 1) xcurrent)		;FIXME:should be customizable
       (if (eql (check-peek-event display) :motion-notify)
-	  (set-drag-move-window (xwindow-window xcurrent dpy)))))
+	  (set-drag-move-window (xwindow-window xcurrent *display*)))))
   t)
 
 (define-event-handler :button-release ()
-  (dformat 1 "button released")
   t)
 
 (define-event-handler :motion-notify (state window root-x root-y)
-  (let* ((d (xdisplay-display display))
-	 (win (xwindow-window window d)))
+  (let ((win (xwindow-window window *display*)))
     (if (eql (check-peek-event display) :button-release)
 	(progn
 	  (drag-move-window root-x root-y)
@@ -148,8 +144,7 @@
 
 (define-event-handler :enter-notify (window mode kind)
   (if (and (eql mode :normal) (not (find kind '(:virtual :nonlinear-virtual :inferior))))
-      (let* ((d (xdisplay-display display))
-	     (win (xwindow-window window d))
+      (let* ((win (xwindow-window window *display*))
 	     (top (find-toplevel win))
 	     (screen (screen win)))
 	(unless (window-equal win (root screen))
@@ -160,12 +155,11 @@
 ;; Keyboard and Pointer State Events
 
 (define-event-handler :mapping-notify (request)
-  (let ((d (xdisplay-display display)))
-    (case request
-      (:modifier (progn
-		   (update-key-mod-map d)
-		   (update-lock-type d))))
-    t))
+  (case request
+    (:modifier (progn
+		 (update-key-mod-map *display*)
+		 (update-lock-type *display*))))
+    t)
 
 ;; Exposure Events
 
@@ -178,19 +172,20 @@
   t)
 
 (define-event-handler :create-notify (window parent override-redirect-p)
-  (let* ((d (xdisplay-display display))
-	 (p (xwindow-window parent d))
+  (let* ((p (xwindow-window parent *display*))
 	 (s (screen p)))
-    (dformat 1 "create-notify received, window ~a" (xlib:wm-name window))
-    (unless (or override-redirect-p (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
-      (manage-new-window window parent s)))
+    (dformat 1 "create-notify received, window ~a or ~a parent ~a" (xlib:wm-name window) (xlib:window-override-redirect window) (xlib:window-id parent))
+    (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
+      (manage-new-window window parent s)
+      (dformat 1 "managed!"))
+    (dformat 1 "leaving create-notify"))
   t)
 
 (define-event-handler :destroy-notify (event-window window)
-  (let* ((d (xdisplay-display display))
-	 (w (xwindow-window event-window d)))
+  (let ((w (xwindow-window event-window *display*)))
     ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
     (unless (window-equal w (root (screen w)))
+      (dformat 1 "about to delete window")
       (delete-window w d)))
   t)
 
@@ -201,7 +196,9 @@
   t)
 
 (define-event-handler :reparent-notify (window parent override-redirect-p)
-  (dformat 1 "window ~a reparented to its new parent ~a" (xlib:get-wm-class window) (xlib:get-wm-class parent))
+  (dformat 1 "window ~a reparented to its new parent ~a" (xlib:window-id window) (xlib:window-id parent))
+  (if (and (xlib:window-equal parent (xlib:drawable-root window)) (eql (xlib:window-override-redirect window :off)))
+      (manage-new-window window parent (screen (xwindow-window parent *display*))))
   t)
 
 (define-event-handler :unmap-notify ()
@@ -210,14 +207,10 @@
 ;; Structure Control Events
 
 (define-event-handler :circulate-request (window place)
-  (let* ((d (xdisplay-display display))
-	 (w (xwindow-window window d)))
-    t))
+  t)
 
 (define-event-handler :configure-request (parent window x y width height border-width stack-mode above-sibling value-mask)
-  (dformat 1 "configure-request received")
-  (let* ((d (xdisplay-display display))
-	 (pwin (xwindow-window parent d))
+  (let* ((pwin (xwindow-window parent *display*))
 	 (screen (screen pwin)))
     (multiple-value-bind (root-x root-y dst-child) (translate-coordinates pwin x y (root screen))
       (let* ((x-p (plusp (logand value-mask 1)))
@@ -232,7 +225,7 @@
 	     (new-height (if height-p (min height (- (height screen) double-border)) (orig-height pwin))))
 ;	(stack-mode-p (plusp (logand value-mask 32)))
 ;	(above-sibling-p (plusp (logand value-mask 64))))
-	(when (not (maximized win))
+	(when (not (maximized pwin))
 	  (xlib:with-state (window)		;FIXME:check the geometric first
 	    (if x-p (setf (xlib:drawable-x window) (+ new-x *default-window-border-width*)))
 	    (if y-p (setf (xlib:drawable-y window) (+ new-y *default-window-border-width*)))
@@ -258,8 +251,7 @@
 	  (mapped-windows workspace) (sort-by-stacking-order (list* window mapped) (screen workspace)))))
 
 (define-event-handler :map-request (parent window)
-  (let* ((d (xdisplay-display display))
-	 (w (xwindow-window parent d))
+  (let* ((w (xwindow-window parent *display*))
 	 (ws (workspace w)))
     (dformat 1 "map-request received,window ~a" (wm-name w))
     (unless (xlib:window-equal (xmaster w) (xlib:drawable-root window))
@@ -267,18 +259,16 @@
       (setf (ws-map-state w) :viewable)
       (set-wm-state parent 1)		;1 for normal
       (withdrawn-to-mapped w)
-      (when (workspace-equal (current-workspace (current-screen d)) ws)
+      (when (workspace-equal (current-workspace (current-screen)) ws)
 	(map-workspace-window w))
-      (flush-display d)))
+      (flush-display *display*)))
   t)
 
 (define-event-handler :resize-request (window width height)
-  (let* ((d (xdisplay-display display))
-	 (win (xwindow-window window d))
+  (let* ((win (xwindow-window window *display*))
 	 (screen (screen win))
 	 (actual-width (min (width screen) width))
 	 (actual-height (min (height screen) height)))
-    (dformat 1 "resize-request received")
     (xlib:with-state (window)
       (setf (xlib:drawable-width window) actual-width
 	    (xlib:drawable-height window) actual-height))
@@ -287,7 +277,7 @@
     (xlib:display-finish-output display))
   t)
 
-(defun event-processor (&optional (display (current-display)))
+(defun event-processor (&optional (display *display*))
   (loop 
      (xlib:process-event (xdisplay display) :handler *event-handlers*)))
 
