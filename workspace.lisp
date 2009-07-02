@@ -113,8 +113,11 @@
     (remove-if-not (lambda (window)
 		     (match-window window :instance instance :class class :name name)) windows)))
 
-(defmethod current-window ((obj null))
-  (current-window (current-workspace nil)))
+(defun current-window (&optional workspace)
+  (workspace-current-window (or workspace (current-workspace))))
+
+(defun (setf current-window) (window workspace)
+  (setf (workspace-current-window workspace) window))
 
 (defun workspace-nwindows (workspace)
   (length (mapped-windows workspace)))
