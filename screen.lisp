@@ -86,7 +86,7 @@
 	       :accessor workspaces
 	       :initform (make-hash-table))
    (current-workspace :initarg :current-workspace
-		      :accessor current-workspace
+		      :accessor screen-current-workspace
 		      :initform nil)
    (rules :initarg :rules
 	  :accessor rules
@@ -133,6 +133,12 @@
 (defgeneric output-to-window (screen xwindow gcontext gravity content))
 
 (defgeneric init-screen (screen))
+
+(defun current-workspace (&optional screen)
+  (screen-current-workspace (or screen (current-screen))))
+
+(defun (setf current-workspace) (workspace screen)
+  (setf (screen-current-workspace screen) workspace))
 
 (defmethod make-internal-window ((s screen))
   (xlib:create-window :parent (xwindow (root s))
@@ -248,10 +254,12 @@
 				  :button-motion
 				  :enter-window
 				  :substructure-notify
-				  :substructure-redirect ))
+				  :substructure-redirect))
 ;; this is lowerlevel function
 (defun manage-new-window (xwindow xroot screen)
+  (dformat 1 "get into manage-new-window")
   (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
+    (dformat 1 "got instance and class")
     (let* ((map-state (xlib:window-map-state xwindow))
 	   (normal-hints (xlib:wm-normal-hints xwindow))
 	   (x (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-x normal-hints))
