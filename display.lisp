@@ -14,7 +14,7 @@
 	    :accessor screens
 	    :initform (make-hash-table))
    (current-screen :initarg :current-screen
-		   :accessor current-screen
+		   :accessor display-current-screen
 		   :initform nil)
    (key-mod-map :initarg :key-mod-map
 		:accessor key-mod-map
@@ -55,21 +55,27 @@
 
 (defgeneric add-screen-to-display (xscreen id d))
 
+(defun current-screen (&optional (display *display*))
+  (display-current-screen display))
+
+(defun (setf current-screen) (screen display)
+  (setf (display-current-screen display) screen))
+
 (defmethod input-focus ((display display))
   (let ((input-focus (xlib:input-focus (xdisplay display))))
     (if (xlib:window-p input-focus)
 	(xwindow-window input-focus display)
 	input-focus)))
 
-(defmethod find-keymap (keymap (d display))
-  (gethash keymap (keymaps d)))
+(defmethod find-keymap (keymap (display display))
+  (gethash keymap (keymaps display)))
 
-(defmethod add-keymap (keymap (d display))
-  (setf (gethash keymap (keymaps d)) (make-hash-table)))
+(defmethod add-keymap (keymap (display display))
+  (setf (gethash keymap (keymaps display)) (make-hash-table)))
 
 (defmethod bind-key (keymap key-desc action (display display) &optional (keep-keymap nil))
   "ACTION is either a command or a keymap while KEYMAP and KEY are what their names indicate.
-example:(bind-key :top-map \"C-h\" :help-map (current-display))"
+example:(bind-key :top-map \"C-h\" :help-map *display*)"
   (let ((key (kbd-internal key-desc (key-mod-map display))))
     (when (plusp key)
       (when (eql keymap :top-map)
@@ -156,10 +162,6 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
     (setf (mod-key-map display) mods)
     (setf (mod-keycodes display) mod-keycodes)))
 
-(defvar *all-displays* (make-hash-table))
-
-(defvar *current-display* nil)
-
 (defun open-display (host &key display protocol)
   (let* ((xdisplay (xlib:open-display host :display display :protocol protocol))
 	 (id (xlib:display-display xdisplay))
@@ -167,8 +169,6 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
 				 :xdisplay xdisplay
 				 :id id
 				 :current-keymap :top-map)))
-    (setf (gethash id *all-displays*) display
-	  *current-display* display)
     (dolist (xscreen (xlib:display-roots xdisplay))
       (add-screen-to-display xscreen (hash-table-count (screens display)) display)
       (if (eql xscreen (xlib:display-default-screen xdisplay))
@@ -177,11 +177,9 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
     display))
 
 (defun close-display (display)
-  (let* ((xdisplay (xdisplay display))
-	 (id (xlib:display-display xdisplay)))
+  (let ((xdisplay (xdisplay display)))
     (xlib:close-display xdisplay)
-    (remhash id *all-displays*)
-    (setf *current-display* nil)))
+    (setf *display* nil)))
 
 (defun init-display-top-half (display)
   (update-key-mod-map display)
@@ -198,9 +196,6 @@ example:(bind-key :top-map \"C-h\" :help-map (current-display))"
   (maphash (lambda (id screen)
 	     (declare (ignore id))
 	     (init-screen screen)) (screens display)))
-
-(defun current-display ()
-  *current-display*)
 
 (defun xdisplay-display (xdisplay)
   (let ((id (xlib:display-display xdisplay)))
