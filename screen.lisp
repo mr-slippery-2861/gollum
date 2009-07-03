@@ -257,9 +257,7 @@
 				  :substructure-redirect))
 ;; this is lowerlevel function
 (defun manage-new-window (xwindow xroot screen)
-  (dformat 1 "get into manage-new-window")
   (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
-    (dformat 1 "got instance and class")
     (let* ((map-state (xlib:window-map-state xwindow))
 	   (normal-hints (xlib:wm-normal-hints xwindow))
 	   (x (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-x normal-hints))
@@ -280,23 +278,20 @@
 				  :orig-height height))
 	   (pwindow (root screen)))
       (setf (xlib:drawable-border-width xwindow) 0)
-      (dformat 1 "prepare to grab server")
-      (xlib:with-server-grabbed ((xdisplay (display screen)))
-	(let ((xmaster (xlib:create-window :parent xroot
-					   :x x
-					   :y y
-					   :width width
-					   :height height
-					   :border (alloc-color *default-window-border* screen)
-					   :border-width *default-window-border-width*
-					   :override-redirect :on
-					   :event-mask *toplevel-window-event*)))
-	  (setf (xlib:window-override-redirect xmaster) :off)
-	  (set-wm-state xmaster (case (xlib:window-map-state xwindow) (:unmapped 0) (:viewable 1)))
-	  (dformat 1 "prepare to reparent")
-	  (xlib:reparent-window xwindow xmaster 0 0)
-	  (setf (xmaster window) xmaster
-		(id window) (xlib:window-id xmaster))))
+      (let ((xmaster (xlib:create-window :parent xroot
+					 :x x
+					 :y y
+					 :width width
+					 :height height
+					 :border (alloc-color *default-window-border* screen)
+					 :border-width *default-window-border-width*
+					 :override-redirect :on
+					 :event-mask *toplevel-window-event*)))
+	(setf (xlib:window-override-redirect xmaster) :off)
+	(set-wm-state xmaster (case (xlib:window-map-state xwindow) (:unmapped 0) (:viewable 1)))
+	(xlib:reparent-window xwindow xmaster 0 0)
+	(setf (xmaster window) xmaster
+	      (id window) (xlib:window-id xmaster)))
       (setf (toplevel-p window) t
 	    (parent window) pwindow
 	    (wm-name window) (xlib:wm-name xwindow)
