@@ -137,7 +137,6 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	     (action (car action))
 	     (current-key-desc (string-trim " " (concat key-desc " " (key->key-desc display key))))
 	     (screen (current-screen display)))
-	(dformat 1 "do-bind: action ~a keep-keymap ~a" action keep-keymap)
 	(if exist-p
 	    (cond
 	      ((eql action :abort)
