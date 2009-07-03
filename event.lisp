@@ -33,7 +33,6 @@
 	     keysym-1
 	     keysym-0))
 	((and shift-p lock-p (eql (lock-type display) :caps-lock))
-	 (write-line "3nd cond")
 	 (if (and (characterp keysym0-character) (lower-case-p keysym0-character))
 	     keysym-0
 	     keysym-1))
@@ -45,7 +44,7 @@
 (defmacro define-event-handler (event-key actual-keys &body body)
   (let ((fn-name (gensym)))
     `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
-		(declare (ignore display event-key event-slots send-event-p))
+		(declare (ignore event-key event-slots send-event-p))
 		(dformat 1 "get into ~a" ,event-key)
 		(handler-bind ((xlib:window-error (lambda (c)
 						    (declare (ignore c))
@@ -85,8 +84,7 @@
 	   (top (find-toplevel win))
 	   (screen (screen top))
 	   (workspace (current-workspace screen)))
-      (set-input-focus top)
-      (dformat 1 "window ~a get focus" (wm-name win))))
+      (set-input-focus top)))
   t)
 
 (define-event-handler :focus-out (window mode kind)
@@ -129,7 +127,6 @@
 
 (define-event-handler :button-press (code window)
   (let ((xcurrent (pointer-current-xwindow window)))
-    (dformat 1 "button ~a pressed" code)
     (when (and (= code 1) xcurrent)		;FIXME:should be customizable
       (if (eql (check-peek-event display) :motion-notify)
 	  (set-drag-move-window (xwindow-window xcurrent *display*)))))
@@ -144,8 +141,7 @@
 	(progn
 	  (drag-move-window root-x root-y)
 	  (set-drag-move-window nil))
-	(drag-move-window root-x root-y :prompt t))
-    (dformat 1 "motion-notify, window ~a root-x ~a root-y ~a next-event ~a" (wm-name win) root-x root-y (check-peek-event display)))
+	(drag-move-window root-x root-y :prompt t)))
   t)
 
 (define-event-handler :enter-notify (window mode kind)
@@ -154,8 +150,7 @@
 	     (top (find-toplevel win))
 	     (screen (screen win)))
 	(unless (window-equal win (root screen))
-	  (setf (current-window (current-workspace screen)) top))
-	(dformat 1 "enter-notify received,window ~a mode ~a kind ~a" (wm-name win) mode kind)))
+	  (setf (current-window (current-workspace screen)) top))))
   t)
 
 ;; Keyboard and Pointer State Events
@@ -190,9 +185,7 @@
 	(let* ((p (xwindow-window parent *display*))
 	       (s (screen p)))
 	  (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
-	    (manage-new-window window parent s)
-	    (dformat 1 "managed!"))
-	  (dformat 1 "leaving create-notify"))
+	    (manage-new-window window parent s)))
 	(dformat 1 "the window does not suvived")))
   t)
 
@@ -200,7 +193,6 @@
   (let ((w (xwindow-window event-window *display*)))
     ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
     (unless (window-equal w (root (screen w)))
-      (dformat 1 "about to delete window")
       (delete-window w *display*)))
   t)
 
@@ -211,7 +203,6 @@
   t)
 
 (define-event-handler :reparent-notify (window parent x y override-redirect-p)
-  (dformat 1 "window ~a reparented to its new parent ~a x ~a y ~a" (xlib:window-id window) (xlib:window-id parent) x y)
   (if (and (xlib:window-equal parent (xlib:drawable-root parent)) (eql override-redirect-p :off))
       (xlib:with-server-grabbed ((xdisplay *display*))
 	(if (probe-xwindow window)
@@ -230,7 +221,6 @@
   (unless (xlib:window-equal parent (xlib:drawable-root parent))
   (let* ((pwin (xwindow-window parent *display*))
 	 (screen (screen pwin)))
-    (dformat 1 "parent ~a x ~a y ~a width ~a height ~a" (wm-name pwin) x y width height)
     (multiple-value-bind (root-x root-y dst-child) (translate-coordinates pwin x y (root screen))
       (declare (ignore dst-child))
       (let* ((x-p (plusp (logand value-mask 1)))
@@ -271,7 +261,6 @@
 (define-event-handler :map-request (parent window)
   (let* ((w (xwindow-window parent *display*))
 	 (ws (workspace w)))
-    (dformat 1 "map-request received,window ~a" (wm-name w))
     (unless (xlib:window-equal (xmaster w) (xlib:drawable-root window))
       (xlib:map-window window)
       (setf (ws-map-state w) :viewable)
