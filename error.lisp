@@ -35,7 +35,16 @@
 ;; errors in clx:
 ;; access-error alloc-error atom-error closed-display colormap-error connection-failure cursor-error device-busy drawable-error font-error gcontext-error id-choice-error implementation-error length-error lookup-error match-error missing-parameter name-error pixmap-error reply-length-error reply-timeout request-error resource-error sequence-error server-disconnect unexpected-reply unknown-error value-error window-error
 (define-error-handler 'xlib:window-error (resource-id)
-  nil)
+  (dformat 1 "window-error received")
+  (if asynchronous
+      t
+      (apply #'error 'xlib:window-error :display display :error-key 'xlib:window-error key-vals)))
+
+(define-error-handler 'xlib:drawable-error ()
+  (dformat 1 "drawable-error received")
+  (if asynchronous
+      t
+      (apply #'error 'xlib:drawable-error :display display :error-key 'xlib:drawable-error key-vals)))
 
 ;; gollum error handling
 
