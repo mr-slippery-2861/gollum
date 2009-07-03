@@ -296,8 +296,6 @@
   t)
 
 (defun event-processor (&optional (display *display*))
-  (handler-bind (())
   (loop
-     (xlib:process-event (xdisplay display) :handler *event-handlers*)
-       (ignore () t))))
+     (xlib:process-event (xdisplay display) :handler *event-handlers*)))
 
