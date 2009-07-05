@@ -64,6 +64,9 @@
    (input-buffer :initarg :input-buffer
 		 :accessor input-buffer
 		 :initform nil)
+   (input-history :initarg :input-history
+		  :accessor input-history
+		  :initform nil)
    (input-buffer-lock :initarg :input-buffer-lock
 		      :accessor input-buffer-lock
 		      :initform (bordeaux-threads:make-recursive-lock "input-buffer-lock"))
@@ -406,14 +409,14 @@
   (add-workspaces-according-to-layout screen)
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
   (manage-existing-windows screen)
-  (setf (mode-line screen) (make-internal-window screen)
+  (setf (output-font screen) (open-font (display screen) *output-font*)
+	(mode-line screen) (make-internal-window screen)
 	(mode-line-gc screen) (create-gcontext (mode-line screen)
 					       (alloc-color *mode-line-background* screen)
 					       (alloc-color *mode-line-foreground* screen)
 					       (output-font screen))
 	(mode-line-timer screen) (make-timer (list 'update-mode-line screen)
 					     0.5)
-	(output-font screen) (open-font (display screen) *output-font*)
 	(message-window screen) (make-internal-window screen)
 	(xlib:drawable-border-width (message-window screen)) *internal-window-border-width*
 	(xlib:window-border (message-window screen)) (alloc-color *internal-window-border* screen)
