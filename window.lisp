@@ -200,6 +200,9 @@
      when (match-window v :instance instance :class class :name name)
      return v))
 
+(defun group-window (window group)
+  (setf (group window) group))
+
 (defmethod maximize-window ((window window))
   (let* ((screen (screen window))
 	 (max-width (- (width screen) (* 2 *default-window-border-width*)))
