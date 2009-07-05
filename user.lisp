@@ -8,7 +8,8 @@
 
 (defun launch ()
   (with-screen-input ((current-screen) "launch: " program)
-    (exec program)))
+    (if program
+	(exec program))))
 
 (defun set-key (keymap key-desc action)
   (bind-key keymap key-desc action *display*))
@@ -30,6 +31,9 @@
       (update-mode-line-child screen :workspace (name workspace)))
     (unless workspace
       (message "workspace ~a does not exist." ws))))
+
+(defun set-window-group (group)
+  (setf (group (current-window)) group))
 
 (defun message (control-string &rest format-arguments)
   (screen-message (current-screen) (apply #'format nil control-string format-arguments)))
