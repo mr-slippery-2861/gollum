@@ -196,10 +196,6 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	     (declare (ignore id))
 	     (init-screen screen)) (screens display)))
 
-(defun xdisplay-display (xdisplay)
-  (let ((id (xlib:display-display xdisplay)))
-    (gethash id *all-displays*)))
-
 (defmethod add-screen-to-display (xscreen id (display display))
   (let ((screen (make-instance 'screen
 			       :id id
