@@ -61,7 +61,7 @@
 (defun colorized-output (screen window gcontext content &optional (offset-y 0))
   (labels ((unpack (command index)
 	     (handler-case (char command index)
-	       (sb-int:invalid-array-index-error () nil)))
+	       #+sbcl (sb-int:invalid-array-index-error () nil)))
 	   (do-command (gc command)
 	     (if command
 		 (let ((1st (unpack command 1))
