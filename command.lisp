@@ -1,38 +1,31 @@
 (in-package :gollum)
 
-(defvar *user-commands* (make-hash-table :test #'equal))
-
-(defclass command ()
-  ((name :initarg :name
-	 :accessor name
-	 :initform nil)
-   (fn-name :initarg :fn-name
-	    :accessor fn-name
-	    :initform nil)))
+(defvar *user-commands* (make-hash-table))
 
 (defmacro defcommand (name args &body body)
-  (declare (type string name)
+  (declare (type symbol name)
 	   (type list args))
   (let ((fn-name (gensym)))
     `(labels ((,fn-name ,args
 		,@body))
-       (setf (gethash ,name *user-commands*) (make-instance 'command :name ,name :fn-name #',fn-name)))))
+       (setf (gethash ',name *user-commands*) #',fn-name))))
 
-(defun run-command-1 (name &rest rest)
-  (multiple-value-bind (command exist-p) (gethash name *user-commands*)
-    (if exist-p
-	(apply (fn-name command) rest)))) ;FIXME:what to do if no command found
+(defun commandp (symbol)
+  (let ((fn (gethash symbol *user-commands*)))
+    (functionp fn)))
 
-(defun run-command (cmd)
-  "CMD is a string looks like \"cmd [args]\",
-and ARGS will be treated as string by default."
-  (let ((command (split-string cmd " ")))
-    (apply #'run-command-1 command)))
+(deftype command ()
+  '(satisfies commandp))
 
-(defun command-p (string)
-  (if (stringp string)
-      (typep (gethash (car (split-string (string-trim " " string) " ")) *user-commands*) 'command)
-      nil))
+(defun run-command (cmd &rest args)
+  (if (commandp cmd)
+      (apply (gethash cmd *user-commands*) args)))
 
 (defun exec (program)
-  (sb-ext:run-program program nil :search t :wait nil))
+  #+sbcl (sb-ext:run-program program nil :search t :wait nil))
+
+(defcommand emacs ()
+  (raise-or-exec "emacs" :class "Emacs"))
+
+(defcommand firefox ()
+  (raise-or-exec "firefox" :class "Firefox"))
