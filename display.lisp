@@ -7,9 +7,12 @@
    (id :initarg :id
        :accessor id
        :initform nil)
-   (windows :initarg :windows
-	    :accessor windows
-	    :initform (make-hash-table))
+   (mapped-windows :initarg :mapped-windows
+		   :accessor mapped-windows
+		   :initform (make-hash-table))
+   (withdrawn-windows :initarg :withdrawn-windows
+		      :accessor withdrawn-windows
+		      :initform (make-hash-table))
    (screens :initarg :screens
 	    :accessor screens
 	    :initform (make-hash-table))
@@ -95,7 +98,7 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	      (let* ((action (car action))
 		     (args (if (listp action) (cdr action) nil))
 		     (action (if (listp action) (car action) action)))
-		(cond ((command-p action) (return-from describe-key action))
+		(cond ((commandp action) (return-from describe-key action))
 		      ((symbol->function action) (return-from describe-key action))
 		      ((keywordp action) (setf keymap action))
 		      (t (return-from describe-key nil))))
@@ -125,7 +128,7 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
   (let ((args (if (listp action) (cdr action) nil))
 	(action (if (listp action) (car action) action)))
     (cond
-      ((command-p action) (run-command action))
+      ((commandp action) (run-command action))
       ((symbol->function action) (apply (symbol-function action) args)))))
 
 (let ((key-desc ""))
@@ -176,9 +179,10 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
     display))
 
 (defun close-display (display)
-  (let ((xdisplay (xdisplay display)))
-    (xlib:close-display xdisplay)
-    (setf *display* nil)))
+  (maphash (lambda (id screen)
+	     (declare (ignore id))
+	     (deinit-screen screen)) (screens display))
+  (xlib:close-display (xdisplay display)))
 
 (defun init-display-top-half (display)
   (update-key-mod-map display)
@@ -206,26 +210,34 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	  (display screen) display)
     (manage-screen-root screen)))
 
-(defmethod xwindow-window (xwin (obj display))
-  (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (windows obj))
-    (if (and exist-p (xmaster win) (xlib:window-equal xwin (xmaster win)))
-	win
-	(error 'no-such-window :xwindow xwin))))
+(defmethod xmaster-window (xwindow (obj display))
+  (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (mapped-windows obj))
+    (if (and exist-p (xmaster window) (xlib:window-equal xwindow (xmaster window)))
+	window
+	(error 'no-such-window :xwindow xwindow))))
 
-(defmethod add-window ((win window) (obj display))
-  (setf (gethash (id win) (windows obj)) win
-	(display win) obj))
+(defmethod xwindow-window (xwindow (obj display))
+  (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (withdrawn-windows obj))
+    (if (and exist-p (xwindow window) (xlib:window-equal xwindow (xwindow window)))
+	window
+	(error 'no-such-window :xwindow xwindow))))
 
-(defmethod delete-window ((win window) (obj display))
-  (let ((screen (screen win))
-	(id (id win)))
-    (setf (map-state win) :unmapped)
-    (delete-window win screen)
-    (xlib:destroy-window (xmaster win))
-    (multiple-value-bind (w exist-p) (gethash id (windows obj))
-      (declare (ignore w))
-      (when exist-p
-	(remhash id (windows obj))))))
+(defmethod add-window ((window window) (obj display))
+  (case (get-wm-state window)
+    (1 (setf (gethash (id window) (mapped-windows obj)) window))
+    (0 (setf (gethash (id window) (withdrawn-windows obj)) window)))
+  (setf (display window) obj)
+  (add-window window (screen window)))	;FIXME: dirty hack
+
+(defmethod delete-window ((window window) (obj display))
+  (let ((screen (screen window))
+	(id (id window)))
+;    (setf (map-state window) :unmapped)
+    (delete-window window screen)
+    (case (get-wm-state window)
+      (1 (remhash id (mapped-windows obj)))
+      (0 (remhash id (withdrawn-windows obj))))
+    (xlib:destroy-window (xmaster window))))
 
 (defun flush-display (display)
   (xlib:display-finish-output (xdisplay display)))
