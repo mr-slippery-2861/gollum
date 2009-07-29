@@ -83,7 +83,7 @@
     (when (> time (real-time timer))
       (cond
 	((symbol->function action) (apply (symbol->function action) args))
-	((command-p action) (run-command action)))
+	((commandp action) (run-command action)))
       (if (numberp repeat)
 	  (setf (real-time timer) (+ (real-time timer) (* repeat internal-time-units-per-second)))
 	  (delete-timer timer)))))
