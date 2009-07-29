@@ -60,10 +60,7 @@
 	   :initform nil)
    (map-state :initarg :map-state
 	      :accessor map-state
-	      :initform :unmapped)
-   (ws-map-state :initarg :ws-map-state
-		 :accessor ws-map-state
-		 :initform :unmapped)))
+	      :initform :unmapped)))
 
 (defgeneric map-workspace-window (win)
   (:documentation "make a window viewable in current workspace,if it is not explicitly unmapped by user"))
@@ -125,35 +122,33 @@
   (eql (map-state window) :unmapped))
 
 (defun should-be-mapped (window)
-  (eql (ws-map-state window) :viewable))
+  (plusp (get-wm-state window)))
 
-(defmethod map-workspace-window ((win window))
-  (when (and (plusp (get-wm-state win)) (should-be-mapped win) (not-mapped win))
-    (xlib:map-window (xmaster win))
-    (setf (map-state win) :viewable)))
+(defmethod map-workspace-window ((window window))
+  (when (and (should-be-mapped window) (not-mapped window))
+    (xlib:map-window (xmaster window))
+    (setf (map-state window) :viewable)))
 
-(defmethod map-window ((win window))
-  (when (eql (map-state win) :unmapped)
-    (xlib:map-window (xmaster win))
-    (setf (map-state win) :viewable))
-  (setf (ws-map-state win) :viewable))
+(defmethod map-window ((window window))
+  (when (not-mapped window)
+    (xlib:map-window (xmaster window))
+    (setf (map-state window) :viewable)))
 
-(defmethod unmap-workspace-window ((win window))
-  (when (mapped win)
-    (xlib:unmap-window (xmaster win))
-    (setf (map-state win) :unmapped)))
+(defmethod unmap-workspace-window ((window window))
+  (when (mapped window)
+    (xlib:unmap-window (xmaster window))
+    (setf (map-state window) :unmapped)))
 
-(defmethod unmap-window ((win window))
-  (when (eql (map-state win) :viewable)
-    (xlib:unmap-window (xmaster win))
-    (setf (map-state win) :unmapped))
-  (setf (ws-map-state win) :unmapped))
+(defmethod unmap-window ((window window))
+  (when (mapped window)
+    (xlib:unmap-window (xmaster window))
+    (setf (map-state window) :unmapped)))
 
 (defmethod window-equal ((w1 window) (w2 window))
   (= (id w1) (id w2)))
 
-(defmethod raise-window ((win window))
-    (setf (xlib:window-priority (xmaster win)) :top-if))
+(defmethod raise-window ((window window))
+    (setf (xlib:window-priority (xmaster window)) :top-if))
 
 (defmethod circulate-window-down ((window window))
   (xlib:circulate-window-down (xmaster window)))
@@ -307,6 +302,15 @@
 
 (defun set-wm-state (xwindow state)
   (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
+
+(defun set-gollum-master (xwindow)
+  (xlib:change-property xwindow :__GOLLUM_MASTER '(1) :__GOLLUM_MASTER 32))
+
+(defun gollum-master-p (xwindow)
+  (let ((gollum-master (car (xlib:get-property xwindow :__GOLLUM_MASTER))))
+    (if gollum-master
+	(plusp gollum-master)
+	nil)))
 
 (defun translate-coordinates (src src-x src-y dst)
   (xlib:translate-coordinates (xmaster src) src-x src-y (xmaster dst)))
