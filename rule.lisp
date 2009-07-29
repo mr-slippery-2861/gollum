@@ -20,6 +20,12 @@
     (apply-place-rule win place-rule)
     t))
 
+(defun window-workspace-according-to-rule (window)
+  (loop for (match-rule workspace) in *all-rules*
+     when (apply #'match-window window match-rule)
+     return (find-workspace workspace (workspaces (screen window)))
+     finally (return (current-workspace (screen window)))))
+
 (defmethod place-window ((win window))
   (loop for rule in *all-rules*
      when (place-window-according-to-rule win (car rule) (cdr rule))
