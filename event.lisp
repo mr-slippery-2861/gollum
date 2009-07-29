@@ -44,7 +44,7 @@
 (defmacro define-event-handler (event-key actual-keys &body body)
   (let ((fn-name (gensym)))
     `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
-		(declare (ignore event-key event-slots send-event-p))
+		(declare (ignore display event-key event-slots send-event-p))
 		(dformat 1 "get into ~a" ,event-key)
 		(handler-bind ((xlib:window-error (lambda (c)
 						    (declare (ignore c))
@@ -56,21 +56,6 @@
 		    (ignore () t)))))
        (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
 
-(defmacro define-event-handler-2 ((event-key restart &rest actual-keys) &body body)
-  (let ((fn-name (gensym)))
-    `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
-		(declare (ignore event-slots))
-		(handler-bind ((no-such-window (lambda (c)
-						 ,(if restart
-						      `(invoke-restart 'copy-superior window)
-						      `(invoke-restart 'ignore-window)))))
-		  (restart-case (progn ,@body)
-		    ,(if restart
-			 `(copy-superior (xwindow)
-					 (,restart xwindow))
-			 `(ignore-window () t))))))
-       (setf (elt *event-handlers* (position ,event-key xlib::*event-key-vector*)) #',fn-name))))
-
 ;; Input Focus Events
 
 (defun find-toplevel (window)
@@ -79,12 +64,12 @@
       (find-toplevel (parent window))))
 
 (define-event-handler :focus-in (window mode kind)
-  (unless (find kind '(:pointer :virtual :nonlinear-virtual))
-    (let* ((win (xwindow-window window *display*))
-	   (top (find-toplevel win))
-	   (screen (screen top))
-	   (workspace (current-workspace screen)))
-      (set-input-focus top)))
+  ;; (unless (find kind '(:pointer :virtual :nonlinear-virtual))
+  ;;   (let* ((win (xwindow-window window *display*))
+  ;; 	   (top (find-toplevel win))
+  ;; 	   (screen (screen top))
+  ;; 	   (workspace (current-workspace screen)))
+  ;;     (set-input-focus top)))
   t)
 
 (define-event-handler :focus-out (window mode kind)
@@ -120,8 +105,8 @@
       (t (event-key)
 	 event-key)))
 
-(defun pointer-current-xwindow (xroot)
-  (multiple-value-bind (x y same-screen-p child state-mask root-x root-y root) (xlib:query-pointer xroot)
+(defun pointer-current-xwindow (xwindow)
+  (multiple-value-bind (x y same-screen-p child state-mask root-x root-y root) (xlib:query-pointer (xlib:drawable-root xwindow))
     (declare (ignore x y same-screen-p state-mask root-x root-y root))
     child))
 
@@ -129,28 +114,27 @@
   (let ((xcurrent (pointer-current-xwindow window)))
     (when (and (= code 1) xcurrent)		;FIXME:should be customizable
       (if (eql (check-peek-event display) :motion-notify)
-	  (set-drag-move-window (xwindow-window xcurrent *display*)))))
+	  (set-drag-move-window (xmaster-window xcurrent *display*)))))
   t)
 
 (define-event-handler :button-release ()
   t)
 
-(define-event-handler :motion-notify (state window root-x root-y)
-  (let ((win (xwindow-window window *display*)))
-    (if (eql (check-peek-event display) :button-release)
-	(progn
-	  (drag-move-window root-x root-y)
-	  (set-drag-move-window nil))
-	(drag-move-window root-x root-y :prompt t)))
+(define-event-handler :motion-notify (root-x root-y)
+  (if (eql (check-peek-event display) :button-release)
+      (progn
+	(drag-move-window root-x root-y)
+	(set-drag-move-window nil))
+      (drag-move-window root-x root-y :prompt t))
   t)
 
 (define-event-handler :enter-notify (window mode kind)
-  (if (and (eql mode :normal) (not (find kind '(:virtual :nonlinear-virtual :inferior))))
-      (let* ((win (xwindow-window window *display*))
-	     (top (find-toplevel win))
-	     (screen (screen win)))
-	(unless (window-equal win (root screen))
-	  (setf (current-window (current-workspace screen)) top))))
+  ;; (if (and (eql mode :normal) (not (find kind '(:virtual :nonlinear-virtual :inferior))))
+  ;;     (let* ((win (xwindow-window window *display*))
+  ;; 	     (top (find-toplevel win))
+  ;; 	     (screen (screen win)))
+  ;; 	(unless (window-equal win (root screen))
+  ;; 	  (setf (current-window (current-workspace screen)) top))))
   t)
 
 ;; Keyboard and Pointer State Events
@@ -180,17 +164,25 @@
       (not-exist () nil))))
 
 (define-event-handler :create-notify (window parent override-redirect-p)
-  (xlib:with-server-grabbed ((xdisplay *display*))
-    (if (probe-xwindow window)	;make sure the window is still alive
-	(let* ((p (xwindow-window parent *display*))
-	       (s (screen p)))
-	  (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
-	    (manage-new-window window parent s)))
-	(dformat 1 "the window does not suvived")))
+  (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root parent))))
+    (let* ((root (xmaster-window (xlib:drawable-root parent) *display*))
+	   (screen (screen root)))
+      (if (not (gollum-master-p window))
+	  (prepare-new-window window parent screen))))
   t)
 
+;; (define-event-handler :create-notify (window parent override-redirect-p)
+;;   (xlib:with-server-grabbed ((xdisplay *display*))
+;;     (if (probe-xwindow window)	;make sure the window is still alive
+;; 	(let* ((p (xwindow-window parent *display*))
+;; 	       (s (screen p)))
+;; 	  (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
+;; 	    (manage-new-window window parent s)))
+;; 	(dformat 1 "the window does not suvived")))
+;;   t)
+
 (define-event-handler :destroy-notify (event-window window)
-  (let ((w (xwindow-window event-window *display*)))
+  (let ((w (xmaster-window event-window *display*)))
     ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
     (unless (window-equal w (root (screen w)))
       (delete-window w *display*)))
@@ -203,10 +195,10 @@
   t)
 
 (define-event-handler :reparent-notify (window parent x y override-redirect-p)
-  (if (and (xlib:window-equal parent (xlib:drawable-root parent)) (eql override-redirect-p :off))
-      (xlib:with-server-grabbed ((xdisplay *display*))
-	(if (probe-xwindow window)
-	    (manage-new-window window parent (screen (xwindow-window parent *display*))))))
+  ;; (if (and (xlib:window-equal parent (xlib:drawable-root parent)) (eql override-redirect-p :off))
+  ;;     (xlib:with-server-grabbed ((xdisplay *display*))
+  ;; 	(if (probe-xwindow window)
+  ;; 	    (manage-new-window window parent (screen (xwindow-window parent *display*))))))
   t)
 
 (define-event-handler :unmap-notify ()
@@ -251,24 +243,17 @@
 	      (orig-height pwin) new-height)))))
   t)
 
-(defun withdrawn-to-mapped (window)
-  (let* ((workspace (workspace window))
-	 (withdrawn (withdrawn-windows workspace))
-	 (mapped (mapped-windows workspace)))
-    (setf (withdrawn-windows workspace) (remove window withdrawn :test #'window-equal)
-	  (mapped-windows workspace) (sort-by-stacking-order (list* window mapped) (screen workspace)))))
-
 (define-event-handler :map-request (parent window)
-  (let* ((w (xwindow-window parent *display*))
-	 (ws (workspace w)))
-    (unless (xlib:window-equal (xmaster w) (xlib:drawable-root window))
+  (if (or (eql (xlib:window-class window) :input-only)
+	  (not (xlib:window-equal parent (xlib:drawable-root parent))))
       (xlib:map-window window)
-      (setf (ws-map-state w) :viewable)
-      (set-wm-state parent 1)		;1 for normal
-      (withdrawn-to-mapped w)
-      (when (workspace-equal (current-workspace (current-screen)) ws)
-	(map-workspace-window w))
-      (flush-display *display*)))
+      (xlib:with-server-grabbed ((xdisplay *display*))
+	(xlib:map-window window)
+	(if (probe-xwindow window)
+	    (unwithdraw window)
+	    ;; if the window does not survived,we suppose a destroy-notify will be received
+	    ;; so we process the died window later
+	    (dformat 1 "the window ~a does not survived" (xlib:window-id window)))))
   t)
 
 (define-event-handler :resize-request (window width height)
