@@ -44,7 +44,7 @@ Modifies the match data; use `save-match-data' if necessary."
 (defvar *debug-stream* *error-output*)
 
 (defun dformat (level control-string &rest format-arguments)
-  (when (>= *debug-level* level)
+  (when (and *debug-level* (or (eql *debug-level* t) (>= *debug-level* level)))
     (multiple-value-bind (sec m h) (decode-universal-time (get-universal-time))
       (format *debug-stream* "~2,'0d:~2,'0d:~2,'0d " h m sec))
     (write-line (apply #'format nil control-string format-arguments) *debug-stream*)))
