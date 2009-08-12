@@ -40,6 +40,9 @@
    (event-handlers :initarg :event-handlers
 		   :accessor event-handlers
 		   :initform nil)
+   (last-event-timestamp :initarg :last-event-timestamp
+			 :accessor last-event-timestamp
+			 :initform 0)
    (font :initarg :font
 	 :accessor font
 	 :initform nil)))
@@ -57,6 +60,8 @@
 (defgeneric do-bind (key window display))
 
 (defgeneric add-screen-to-display (xscreen id d))
+
+(defgeneric update-last-event-timestamp (display timestamp))
 
 (defun current-screen (&optional (display *display*))
   (display-current-screen display))
@@ -210,6 +215,11 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	  (display screen) display)
     (manage-screen-root screen)))
 
+(defmethod update-last-event-timestamp ((display display) timestamp)
+  (let ((last (last-event-timestamp display)))
+    (if (or (> (- last timestamp) (* 30 internal-time-units-per-second)) (> timestamp last))
+	(setf (last-event-timestamp display) timestamp))))
+
 (defmethod xmaster-window (xwindow (obj display))
   (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (mapped-windows obj))
     (if (and exist-p (xmaster window) (xlib:window-equal xwindow (xmaster window)))
@@ -234,9 +244,8 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	(id (id window)))
 ;    (setf (map-state window) :unmapped)
     (delete-window window screen)
-    (case (get-wm-state window)
-      (1 (remhash id (mapped-windows obj)))
-      (0 (remhash id (withdrawn-windows obj))))
+    (remhash id (mapped-windows obj))
+    (remhash id (withdrawn-windows obj))
     (xlib:destroy-window (xmaster window))))
 
 (defun flush-display (display)
