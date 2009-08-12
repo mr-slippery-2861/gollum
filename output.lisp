@@ -55,7 +55,7 @@
 	      (fg (xlib:gcontext-foreground gcontext)))
 	  (xlib:with-gcontext (gcontext :foreground bg :background fg)
 	    (xlib:draw-image-glyphs window gcontext x y (subseq string start end) :translate #'translate-id :size 16)))
-	(xlib:draw-image-glyphs window gcontext x y (subseq string start end) :translate #'translate-id :size 16))))
+	(xlib:draw-glyphs window gcontext x y (subseq string start end) :translate #'translate-id :size 16))))
 
 ;; FIXME:we share a single output-gc which may cause problems when two different threads access it
 (defun colorized-output (screen window gcontext content &optional (offset-y 0))
