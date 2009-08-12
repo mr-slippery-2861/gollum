@@ -156,28 +156,23 @@
 (defmethod circulate-window-up ((window window))
   (xlib:circulate-window-up (xmaster window)))
 
-;; Input Model 	        Input Field 	WM_TAKE_FOCUS
-;; No Input 	        False 	        Absent             we are not needed to set
-;; Passive 	        True 	        Absent             we are needed to set
-;; Locally Active 	True 	        Present            we are needed to set
-;; Globally Active 	False 	        Present            we are not needed to set
-(defun input-field (window)
-  (let (hints (xlib:wm-hints (xwindow window)))
-    (if hints
-	(eql (xlib:wm-hints-input hints) :on)
-	nil)))
+(defmethod set-input-focus ((focus window) &optional (revert-to :pointer-root))
+  (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to))
 
-(defmethod set-input-focus ((focus window) &optional (revert-to :parent))
-  (if (input-field focus)
-      (xlib:set-input-focus (xdisplay (display focus)) (xmaster focus) revert-to)))
+(defun send-client-message (window type &rest data)
+  (xlib:send-event (xwindow window) :client-message nil
+		   :window (xwindow window)
+		   :type type
+		   :format 32
+		   :data (mapcar (lambda (x)
+				   (if (keywordp x)
+				       (xlib:intern-atom (xdisplay (display window)) x)
+				       x)) data)))
 
 (defun kill-window (window)
   (let ((display (display window)))
     (if (find :WM_DELETE_WINDOW (protocols window))
-	(xlib:send-event (xwindow window) :client-message nil :window (xwindow window)
-			                                      :type :WM_PROTOCOLS
-							      :format 32
-							      :data (list (xlib:intern-atom (xdisplay display) :WM_DELETE_WINDOW)))
+	(send-client-message window :WM_PROTOCOLS :WM_DELETE_WINDOW)
 	(xlib:kill-client (xdisplay display) (xlib:window-id (xwindow window))))))
 
 (defun kill ()
@@ -298,7 +293,7 @@
   (xlib:grab-keyboard (xmaster win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
 (defun get-wm-state (window)
-  (car (xlib:get-property (xmaster window) :WM_STATE)))
+  (car (xlib:get-property (xwindow window) :WM_STATE)))
 
 (defun set-wm-state (xwindow state)
   (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
@@ -315,6 +310,6 @@
 (defun translate-coordinates (src src-x src-y dst)
   (xlib:translate-coordinates (xmaster src) src-x src-y (xmaster dst)))
 
-(defvar *default-window-border* "green")
+(defvar *default-window-border* "blue")
 
 (defvar *default-window-border-width* 2)
