@@ -22,6 +22,12 @@
 
 (defvar *display* nil)
 
+(defun update-event-time (timestamp)
+  (update-last-event-timestamp *display* timestamp))
+
+(defun get-event-time ()
+  (last-event-timestamp *display*))
+
 (defun gollum (display-name &optional (debug nil))
   (multiple-value-bind (host display screen protocol) (parse-display-name display-name)
     (declare (ignore screen))
