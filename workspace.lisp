@@ -15,10 +15,10 @@
 		   :initform nil)
    (withdrawn-windows :initarg :withdrawn-windows
 		      :accessor withdrawn-windows
-		      :initform nil)))
-   ;; (current-window :initarg :current-window
-   ;; 		   :accessor workspace-current-window
-   ;; 		   :initform nil)))
+		      :initform nil)
+   (current-focus :initarg :current-focus
+		  :accessor current-focus
+		  :initform nil)))
 
 (defgeneric add-window (win obj))
 
@@ -46,6 +46,8 @@
 (defgeneric workspace-next-window (workspace))
 
 (defgeneric workspace-prev-window (workspace))
+
+(defgeneric workspace-set-focus (workspace window))
 
 (defgeneric destroy-workspace (workspace))
 
@@ -84,9 +86,8 @@
 (defmethod delete-window ((window window) (obj workspace))
   (unmap-workspace-window window)
   (setf (workspace window) nil)
-  (case (get-wm-state window)
-    (0 (setf (withdrawn-windows obj) (remove window (withdrawn-windows obj) :test #'window-equal)))
-    (1 (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))))) ;remove doesn't break the stacking order
+  (setf (withdrawn-windows obj) (remove window (withdrawn-windows obj) :test #'window-equal))
+  (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))) ;remove doesn't break the stacking order
 
 (defmethod move-window-to-workspace ((win window) (ws workspace))
   (let ((source (find-workspace-by-id (workspace win) (workspaces (screen win))))
@@ -95,10 +96,7 @@
     (add-window win dest)))
 
 (defmethod map-workspace ((workspace workspace))
-  (mapc #'map-workspace-window (mapped-windows workspace))
-  (when (current-window workspace)
-    (raise-window (current-window workspace))
-    (set-input-focus (current-window workspace) :parent)))
+  (mapc #'map-workspace-window (mapped-windows workspace)))
 
 (defmethod unmap-workspace ((workspace workspace))
   (mapc #'unmap-workspace-window (mapped-windows workspace)))
@@ -128,7 +126,8 @@
 	     (screen workspace))
 	(setf (stacking-orderd screen) (append (remove id (stacking-orderd screen) :test #'=) (list id)))
 	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen))
-	(raise-window window)))))
+	(raise-window window)
+	(workspace-set-focus workspace window)))))
 
 (defmethod workspace-next-window ((workspace workspace))
   (let ((windows (mapped-windows workspace)))
@@ -138,7 +137,8 @@
 	     (screen (screen workspace)))
 	(setf (stacking-orderd screen) (list* id (remove id (stacking-orderd screen) :test #'=)))
 	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen))
-	(circulate-window-down (root screen))))))
+	(circulate-window-down (root screen))
+	(workspace-set-focus workspace (current-window workspace))))))
 
 (defun next-window ()
   (workspace-next-window (current-workspace nil)))
@@ -151,7 +151,8 @@
 	     (screen (screen workspace)))
 	(setf (stacking-orderd screen) (append (remove id (stacking-orderd screen) :test #'=) (list id)))
 	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen))
-	(circulate-window-up (root screen))))))
+	(circulate-window-up (root screen))
+	(workspace-set-focus workspace (current-window workspace))))))
 
 (defun prev-window ()
   (workspace-prev-window (current-workspace nil)))
@@ -164,6 +165,11 @@
     (setf (xlib:window-event-mask xmaster) 0)
     (xlib:reparent-window xwindow xroot (xlib:drawable-x xmaster) (xlib:drawable-y xmaster))
     (xlib:destroy-window xmaster)))
+
+(defmethod workspace-set-focus ((workspace workspace) window)
+  (if (workspace-equal (current-workspace) workspace)
+      (set-focus window))
+  (setf (current-focus workspace) window))
 
 (defmethod destroy-workspace ((workspace workspace))
   (mapc #'unmanage-window (withdrawn-windows workspace))
