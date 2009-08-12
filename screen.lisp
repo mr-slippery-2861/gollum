@@ -154,11 +154,15 @@
 		      :override-redirect :on
 		      :save-under :on))
 
+(defmethod set-current-workspace ((ws workspace) (s screen))
+  (setf (current-workspace s) ws))
+
 (defmethod switch-to-workspace ((workspace workspace) (screen screen))
   (unless (workspace-equal (current-workspace screen) workspace)
     (unmap-workspace (current-workspace screen))
     (map-workspace workspace)
     (set-current-workspace workspace screen)
+    (workspace-set-focus workspace (current-focus workspace))
     (flush-display (display screen))))
 
 (defmethod raise-workspace-window ((win window) (s screen))
@@ -184,9 +188,8 @@
 	(ws (workspace window)))
     (when ws
       (delete-window window ws))
-    (case (get-wm-state window)
-      (1 (remhash id (mapped-windows obj)))
-      (0 (remhash id (withdrawn-windows obj))))
+    (remhash id (mapped-windows obj))
+    (remhash id (withdrawn-windows obj))
     (setf (stacking-orderd obj) (remove id (stacking-orderd obj) :test #'=))))
 
 (defmethod find-matching-windows ((obj screen) &key instance class name)
@@ -262,7 +265,6 @@
 				  :substructure-redirect))
 
 (defun prepare-new-window (xwindow xroot screen)
-  (dformat 0 "get into prepare")
   (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
     (let* ((xmaster (xlib:create-window :parent xroot
 					:x 0 :y 0 :width 1 :height 1
@@ -279,13 +281,12 @@
 				  :wm-instance wm-instance
 				  :wm-class wm-class
 				  :map-state :unmapped)))
-      (set-wm-state xmaster 0)
+      (set-wm-state xwindow 0)
       (set-gollum-master xmaster)
       (setf (screen window) screen)	;FIXME: dirty hack
       (add-window window *display*))))
 
 (defun unwithdraw (xwindow)
-  (dformat 0 "get into unwithdraw")
   (let* ((window (xwindow-window xwindow *display*))
 	 (xmaster (xmaster window))
 	 (screen (screen window))
@@ -295,25 +296,32 @@
 	 (y (xlib:drawable-y xwindow))
 	 (width (xlib:drawable-width xwindow))
 	 (height (xlib:drawable-height xwindow)))
+    (unless (title window)
+      (setf (title window) (make-decorate window)))
     (xlib:with-state (xmaster)
       (setf (xlib:drawable-x xmaster) x
 	    (xlib:drawable-y xmaster) y
 	    (xlib:drawable-width xmaster) width
-	    (xlib:drawable-height xmaster) height))
+	    (xlib:drawable-height xmaster) (+ height (height (title window)))))
     (setf (xlib:drawable-border-width xwindow) 0) ;the managed window need no border
-    (set-wm-state xmaster 1)		;set xmaster to normal
+    (set-wm-state xwindow 1)		;set xwindow to normal
     (setf (id window) (xlib:window-id xmaster))
+;    (update-title (title window))
     (remhash (xlib:window-id xwindow) (withdrawn-windows *display*))
     (setf (gethash (xlib:window-id xmaster) (mapped-windows *display*)) window)
     (remhash (xlib:window-id xwindow) (withdrawn-windows screen))
     (setf (gethash (xlib:window-id xmaster) (mapped-windows screen)) window)
     (setf (mapped-windows workspace) (sort-by-stacking-order (list* window (mapped-windows workspace)) screen))
     (setf (withdrawn-windows workspace) (remove window (withdrawn-windows workspace) :test #'window-equal))
-    (xlib:reparent-window xwindow xmaster 0 0)
+    (xlib:reparent-window xwindow xmaster 0 (height (title window)))
     (xlib:add-to-save-set xwindow)
     (update-screen-window-geometry window)
     (if (workspace-equal (workspace window) (current-workspace screen))
-	(map-workspace-window window))))
+	(map-workspace-window window))
+    (if (should-grab-input window)
+	(workspace-set-focus (workspace window) window)
+	(if (find :WM_TAKE_FOCUS (protocols window))
+	    (send-client-message window :WM_PROTOCOLS :WM_TAKE_FOCUS (get-event-time))))))
 
 (defun manage-existing-window (xwindow xroot screen)
   (prepare-new-window xwindow xroot screen)
@@ -434,9 +442,10 @@
 	(setf (xlib:drawable-height xwindow) (+ (* 2 *internal-window-vertical-padding*) height)
 	      (xlib:drawable-width xwindow) (+ (* 2 *internal-window-horizontal-padding*) width)
 	      (xlib:window-priority xwindow) :top-if)
-	(calculate-geometry screen xwindow gravity)))
-    (xlib:with-gcontext (gcontext :foreground (xlib:gcontext-background gcontext))
-      (xlib:draw-rectangle xwindow gcontext 0 0 (xlib:drawable-width xwindow) (xlib:drawable-height xwindow) t))))
+	(calculate-geometry screen xwindow gravity))
+      (set-focus (current-focus (current-workspace screen)))
+      (xlib:with-gcontext (gcontext :foreground (xlib:gcontext-background gcontext))
+	(xlib:draw-rectangle xwindow gcontext 0 0 (xlib:drawable-width xwindow) (xlib:drawable-height xwindow) t)))))
 
 (defmethod add-workspaces-according-to-layout ((screen screen))
   (if *workspace-layout*
@@ -468,7 +477,6 @@
 (defmethod init-screen ((screen screen))
   (add-workspaces-according-to-layout screen)
   (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
-  (manage-existing-windows screen)
   (setf (output-font screen) (open-font (display screen) *output-font*)
 	(mode-line screen) (make-internal-window screen)
 	(mode-line-gc screen) (create-gcontext (mode-line screen)
@@ -508,6 +516,8 @@
 						    :line-style :dash
 						    :line-width 1
 						    :subwindow-mode :clip-by-children))
+  (xlib:set-wm-properties (key-prompt-window screen) :input :off)
+  (manage-existing-windows screen)
   (init-mode-line screen)
   (xlib:grab-button (xwindow (root screen)) 1 '(:button-motion :button-release) ;FIXME:should be customizable
 		    :modifiers (list (key->mod :alt (key-mod-map (display screen))))
