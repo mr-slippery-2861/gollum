@@ -45,7 +45,7 @@
   (let ((fn-name (gensym)))
     `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
 		(declare (ignore display event-key event-slots send-event-p))
-		(dformat 1 "get into ~a" ,event-key)
+		(dformat 2 "get into ~a" ,event-key)
 		(handler-bind ((xlib:window-error (lambda (c)
 						    (declare (ignore c))
 						    (invoke-restart 'ignore)))
@@ -65,11 +65,8 @@
 
 (define-event-handler :focus-in (window mode kind)
   ;; (unless (find kind '(:pointer :virtual :nonlinear-virtual))
-  ;;   (let* ((win (xwindow-window window *display*))
-  ;; 	   (top (find-toplevel win))
-  ;; 	   (screen (screen top))
-  ;; 	   (workspace (current-workspace screen)))
-  ;;     (set-input-focus top)))
+  ;;   (let ((win (xwindow-window window *display*)))
+  ;;     (setf (current-focus (workspace win)) win)))
   t)
 
 (define-event-handler :focus-out (window mode kind)
@@ -90,14 +87,16 @@
     (setf mods (remove :lock (remove :shift (remove-if-not (lambda (x) (typep x 'xlib:modifier-key)) mods))))
     (apply #'xlib:make-state-mask mods)))
 
-(define-event-handler :key-press (code state window)
+(define-event-handler :key-press (code state window time)
   (let* ((keysym (code-state->keysym code state *display*))
 	 (key (key->hash (filt-state state) keysym))) ;FIME:we simply filt :shift out
+    (update-event-time time)
     (unless (find code (mod-keycodes *display*))
       (do-bind key window *display*)))
   t)
 
-(define-event-handler :key-release ()
+(define-event-handler :key-release (time)
+  (update-event-time time)
   t)
 
 (defun check-peek-event (xdisplay)
@@ -110,31 +109,40 @@
     (declare (ignore x y same-screen-p state-mask root-x root-y root))
     child))
 
-(define-event-handler :button-press (code window)
-  (let ((xcurrent (pointer-current-xwindow window)))
+(define-event-handler :button-press (state code window time)
+  (let ((xcurrent (pointer-current-xwindow window))
+	(state-keys (xlib:make-state-keys state)))
+    (update-event-time time)
     (when (and (= code 1) xcurrent)		;FIXME:should be customizable
-      (if (eql (check-peek-event display) :motion-notify)
+      (if (eql (check-peek-event (xdisplay *display*)) :motion-notify)
 	  (set-drag-move-window (xmaster-window xcurrent *display*)))))
   t)
 
-(define-event-handler :button-release ()
+(define-event-handler :button-release (time)
+  (update-event-time time)
   t)
 
-(define-event-handler :motion-notify (root-x root-y)
-  (if (eql (check-peek-event display) :button-release)
+(define-event-handler :motion-notify (root-x root-y time)
+  (update-event-time time)
+  (if (eql (check-peek-event (xdisplay *display*)) :button-release)
       (progn
 	(drag-move-window root-x root-y)
 	(set-drag-move-window nil))
       (drag-move-window root-x root-y :prompt t))
   t)
 
-(define-event-handler :enter-notify (window mode kind)
+(define-event-handler :enter-notify (window mode kind time)
+  (update-event-time time)
   ;; (if (and (eql mode :normal) (not (find kind '(:virtual :nonlinear-virtual :inferior))))
   ;;     (let* ((win (xwindow-window window *display*))
   ;; 	     (top (find-toplevel win))
   ;; 	     (screen (screen win)))
   ;; 	(unless (window-equal win (root screen))
   ;; 	  (setf (current-window (current-workspace screen)) top))))
+  t)
+
+(define-event-handler :leave-notify (time)
+  (update-event-time time)
   t)
 
 ;; Keyboard and Pointer State Events
@@ -148,6 +156,12 @@
 
 ;; Exposure Events
 
+(define-event-handler :exposure (window count)
+  (if (zerop count)
+      (multiple-value-bind (children parent root) (xlib:query-tree window)
+	(declare (ignore children root))
+	(if (gollum-master-p parent)
+	    (update-title (title (xmaster-window parent *display*)))))))
 
 ;; Window State Events
 (define-event-handler :circulate-notify ()
@@ -181,11 +195,14 @@
 ;; 	(dformat 1 "the window does not suvived")))
 ;;   t)
 
-(define-event-handler :destroy-notify (event-window window)
-  (let ((w (xmaster-window event-window *display*)))
+(define-event-handler :destroy-notify (event-window)
+  (if (probe-xwindow event-window)	;if event-window still exists,it is either xmaster or root
+    (let* ((w (xmaster-window event-window *display*))
+	   (workspace (workspace w)))
     ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
-    (unless (window-equal w (root (screen w)))
-      (delete-window w *display*)))
+      (unless (window-equal w (root (screen w)))
+	(delete-window w *display*)
+	(workspace-set-focus workspace (current-window workspace)))))
   t)
 
 (define-event-handler :gravity-notify ()
@@ -267,6 +284,10 @@
     (setf (orig-width win) actual-width
 	  (orig-height win) actual-height)
     (xlib:display-finish-output display))
+  t)
+
+(define-event-handler :client-message (window type data)
+  
   t)
 
 (defun event-processor (&optional (display *display*))
