@@ -17,6 +17,8 @@
 	       (:file "keysymdef")
 	       (:file "keymap")
 	       (:file "window")
+	       (:file "decorate")
+	       (:file "clx-decorate")
 	       (:file "workspace")
 	       (:file "rule")
 	       (:file "color")
