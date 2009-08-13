@@ -123,15 +123,16 @@
 
 (defmethod output-to-window ((screen screen) xwindow gcontext gravity content)
   "CONTENT is either a string or a list of string indicating multi-line drawing"
-  (let* ((font (xlib:gcontext-font gcontext))
-	 (ascent (xlib:font-ascent font))
-	 (descent (xlib:font-descent font))
-	 (lines (if (typep content 'string) (list content) content)))
-    (setup-window-for-drawing-glyphs screen xwindow gravity gcontext font (mapcar #'parse-color-controling lines))
-    (loop for line in lines
-       for y = 0 then (+ y ascent descent)
-       do (colorized-output screen xwindow gcontext line y))
-    (flush-display (display screen))))
+  (if content
+      (let* ((font (xlib:gcontext-font gcontext))
+	     (ascent (xlib:font-ascent font))
+	     (descent (xlib:font-descent font))
+	     (lines (if (typep content 'string) (list content) content)))
+	(setup-window-for-drawing-glyphs screen xwindow gravity gcontext font (mapcar #'parse-color-controling lines))
+	(loop for line in lines
+	   for y = 0 then (+ y ascent descent)
+	   do (colorized-output screen xwindow gcontext line y))
+	(flush-display (display screen)))))
 
 (defmethod screen-message ((screen screen) message &optional (time-out-p t))
   (let ((message-window (message-window screen)))
