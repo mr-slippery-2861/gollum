@@ -115,7 +115,9 @@
     (update-event-time time)
     (when (and (= code 1) xcurrent)		;FIXME:should be customizable
       (if (eql (check-peek-event (xdisplay *display*)) :motion-notify)
-	  (set-drag-move-window (xmaster-window xcurrent *display*)))))
+	  (progn
+	    (set-drag-move-window (xmaster-window xcurrent *display*))
+	    (dformat 1 "target window set")))))
   t)
 
 (define-event-handler :button-release (time)
@@ -124,11 +126,9 @@
 
 (define-event-handler :motion-notify (root-x root-y time)
   (update-event-time time)
+  (drag-move-window root-x root-y)
   (if (eql (check-peek-event (xdisplay *display*)) :button-release)
-      (progn
-	(drag-move-window root-x root-y)
-	(set-drag-move-window nil))
-      (drag-move-window root-x root-y :prompt t))
+      (set-drag-move-window nil))
   t)
 
 (define-event-handler :enter-notify (window mode kind time)
