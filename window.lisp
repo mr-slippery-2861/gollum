@@ -105,6 +105,8 @@
 
 (defgeneric resize-window (window width height &key prompt))
 
+(defgeneric move-window (window x y))
+
 (defgeneric grab-key (win keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
 
 (defgeneric ungrab-key (win keycode &key modifiers))
@@ -171,8 +173,8 @@
 
 (defun kill-window (window)
   (let ((display (display window)))
-    (if (find :WM_DELETE_WINDOW (protocols window))
-	(send-client-message window :WM_PROTOCOLS :WM_DELETE_WINDOW)
+    (if (find :wm_delete_window (protocols window))
+	(send-client-message window :wm_protocols :wm_delete_window)
 	(xlib:kill-client (xdisplay display) (xlib:window-id (xwindow window))))))
 
 (defun kill ()
@@ -239,49 +241,34 @@
   (if (current-window nil)
       (restore-window (current-window nil))))
 
-(let ((first-x nil)
-      (first-y nil))
-  (defun calculate-move-offsets (x y)
-    (unless first-x
-      (setf first-x x
-	    first-y y))
-    (if x
-	(values (- x first-x) (- y first-y))
-	(setf first-x nil
-	      first-y nil))))
+(defmethod move-window ((window window) x y)
+  (let ((xmaster (xmaster window)))
+    (xlib:with-state (xmaster)
+      (setf (xlib:drawable-x xmaster) x
+	    (xlib:drawable-y xmaster) y))
+    (setf (orig-x window) x
+	  (orig-y window) y)))
 
-(let ((target-window nil))
+(let ((target-window nil)
+      (offset-x nil)
+      (offset-y nil))
   (defun set-drag-move-window (window)
-    (setf target-window window))
-  (defun drag-move-window (x y &key (prompt nil))
+    (setf target-window window)
+    (if window
+	(multiple-value-setq (offset-x offset-y) (xlib:query-pointer (xmaster window)))
+	(setf offset-x nil
+	      offset-y nil)))
+  (defun drag-move-window (x y)
     (when target-window
-      (multiple-value-bind (offset-x offset-y) (calculate-move-offsets x y)
-	(let* ((screen (screen target-window))
-	       (min-x (x screen))
-	       (min-y (y screen))
-	       (max-x (+ min-x (width screen)))
-	       (max-y (+ min-y (height screen)))
-	       (gc (configure-gc screen))
-	       (xmaster (xmaster target-window))
-	       (xroot (xwindow (root screen)))
-	       (current-x (xlib:drawable-x xmaster))
-	       (current-y (xlib:drawable-y xmaster))
-	       (new-x (second (sort (list min-x (+ current-x offset-x) max-x) #'<)))
-	       (new-y (second (sort (list min-y (+ current-y offset-y) max-y) #'<))))
-	  (if prompt
-	      (let ((width (xlib:drawable-width xmaster))
-		    (height (xlib:drawable-height xmaster)))
-		(xlib:clear-area xroot)
-		(xlib:draw-lines xroot gc (list new-x new-y width 0 0 height (- width) 0 0 (- height)) :relative-p t))
-	      (progn
-		(xlib:with-state (xmaster)
-		  (setf (xlib:drawable-x xmaster) new-x
-			(xlib:drawable-y xmaster) new-y))
-		(setf (orig-x target-window) new-x
-		      (orig-y target-window) new-y)
-		(calculate-move-offsets nil nil)
-		(xlib:clear-area xroot)))
-	  (flush-display (display screen)))))))
+      (let* ((screen (screen target-window))
+	     (min-x (x screen))
+	     (min-y (y screen))
+	     (max-x (+ min-x (width screen)))
+	     (max-y (+ min-y (height screen)))
+	     (new-x (second (sort (list min-x (- x offset-x) max-x) #'<)))
+	     (new-y (second (sort (list min-y (- y offset-y) max-y) #'<))))
+	(move-window target-window new-x new-y)
+	(flush-display (display screen))))))
 
 (defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-key (xmaster win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
