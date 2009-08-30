@@ -19,6 +19,7 @@
 	       (:file "window")
 	       (:file "decorate")
 	       (:file "clx-decorate")
+	       (:file "focus")
 	       (:file "workspace")
 	       (:file "rule")
 	       (:file "color")
