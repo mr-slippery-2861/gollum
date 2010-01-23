@@ -43,8 +43,17 @@
    (last-event-timestamp :initarg :last-event-timestamp
 			 :accessor last-event-timestamp
 			 :initform 0)
+   (cursor-default :initarg :cursor-default
+		   :accessor cursor-default
+		   :initform nil)
+   (cursor-drag-move :initarg :cursor-drag-move
+		     :accessor cursor-drag-move
+		     :initform nil)
+   (cursor-drag-resize :initarg :cursor-drag-resize
+		       :accessor cursor-drag-resize
+		       :initform nil)
    (font :initarg :font
-	 :accessor font
+	 :accessor font 
 	 :initform nil)))
 
 (defgeneric input-focus (display))
@@ -189,6 +198,28 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	     (deinit-screen screen)) (screens display))
   (xlib:close-display (xdisplay display)))
 
+(defun setup-cursor-shapes (display)
+  (let ((white (xlib:make-color :red 1.0 :green 1.0 :blue 1.0))
+	(black (xlib:make-color :red 0.0 :green 0.0 :blue 0.0))
+	(cursor-font (xlib:open-font (xdisplay display) "cursor")))
+    (labels ((create-cursor (char)
+	       (xlib:create-glyph-cursor :source-font cursor-font
+					 :source-char char
+					 :mask-font cursor-font
+					 :mask-char (1+ char)
+					 :foreground black
+					 :background white)))
+    (setf (cursor-default display) (create-cursor 68)
+	  (cursor-drag-move display) (create-cursor 30)
+	  (getf (cursor-drag-resize display) :nw) (create-cursor 134)
+	  (getf (cursor-drag-resize display) :top) (create-cursor 138)
+	  (getf (cursor-drag-resize display) :ne) (create-cursor 136)
+	  (getf (cursor-drag-resize display) :right) (create-cursor 96)
+	  (getf (cursor-drag-resize display) :se) (create-cursor 14)
+	  (getf (cursor-drag-resize display) :bottom) (create-cursor 16)
+	  (getf (cursor-drag-resize display) :sw) (create-cursor 12)
+	  (getf (cursor-drag-resize display) :left) (create-cursor 70)))))
+
 (defun init-display-top-half (display)
   (update-key-mod-map display)
   (update-lock-type display)
@@ -198,7 +229,8 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
   (add-keymap :root-map display)
   (add-keymap :window-map display)
   (setup-input-map display)
-  (setup-default-bindings display))
+  (setup-default-bindings display)
+  (setup-cursor-shapes display))
 
 (defun init-display-bottom-half (display)
   (maphash (lambda (id screen)
