@@ -7,6 +7,9 @@
    (xmaster :initarg :xmaster		;prepare for reparenting
 	    :accessor xmaster
 	    :initform nil)
+   (xframe :initarg :xframe
+	   :accessor xframe
+	   :initform nil)
    (xwindow :initarg :xwindow		;a xlib:window instance
 	    :accessor xwindow
 	    :initform nil)
@@ -31,12 +34,18 @@
    (orig-height :initarg :orig-height
 		:accessor orig-height
 		:initform nil)
+   (min-width :initarg :min-width
+	      :accessor min-width
+	      :initform 1)
+   (min-height :initarg :min-height
+	       :accessor min-height
+	       :initform 1)
    (size-state :initarg :size-state
 	       :accessor size-state
 	       :initform :normal)
-   (title :initarg :title		;it's the title bar,as my plan,it can be a gtk window
-	  :accessor title
-	  :initform nil)
+   (decorate :initarg :decorate
+	     :accessor decorate
+	     :initform nil)
    (wm-name :initarg :wm-name
 	     :accessor wm-name
 	     :initform nil)
@@ -116,6 +125,30 @@
 (defgeneric ungrab-keyboard (display &key time))
 
 (defgeneric print-obj (obj))
+
+(defmethod x ((window window))
+  (xlib:drawable-x (xmaster window)))
+
+(defmethod (setf x) (new-x (window window))
+  (setf (xlib:drawable-x (xmaster window)) new-x))
+
+(defmethod y ((window window))
+  (xlib:drawable-y (xmaster window)))
+
+(defmethod (setf y) (new-y (window window))
+  (setf (xlib:drawable-y (xmaster window)) new-y))
+
+(defmethod width ((window window))
+  (xlib:drawable-width (xmaster window)))
+
+(defmethod (setf width) (new-width (window window))
+  (setf (xlib:drawable-width (xmaster window)) new-width))
+
+(defmethod height ((window window))
+  (xlib:drawable-height (xmaster window)))
+
+(defmethod (setf height) (new-height (window window))
+  (setf (xlib:drawable-height (xmaster window)) new-height))
 
 (defun mapped (window)
   (eql (map-state window) :viewable))
@@ -197,18 +230,25 @@
 
 (defmethod maximize-window ((window window))
   (let* ((screen (screen window))
-	 (max-width (- (width screen) (* 2 *default-window-border-width*)))
-	 (max-height (- (height screen) (* 2 *default-window-border-width*)))
+	 (max-width (width screen))
+	 (max-height (height screen))
 	 (xmaster (xmaster window))
-	 (xwindow (xwindow window)))
+	 (xframe (xframe window))
+	 (xwindow (xwindow window))
+	 (double-border (* 2 *default-window-border-width*))
+	 (title-height (title-height (decorate window))))
     (xlib:with-state (xmaster)
       (setf (xlib:drawable-x xmaster) (x screen)
 	    (xlib:drawable-y xmaster) (y screen)
 	    (xlib:drawable-width xmaster) max-width
 	    (xlib:drawable-height xmaster) max-height))
+    (xlib:with-state (xframe)
+      (setf (xlib:drawable-width xframe) (- max-width double-border)
+	    (xlib:drawable-height xframe) (- max-height double-border title-height)))
     (xlib:with-state (xwindow)
-      (setf (xlib:drawable-width xwindow) max-width
-	    (xlib:drawable-height xwindow) max-height))
+      (setf (xlib:drawable-width xwindow) (- max-width double-border)
+	    (xlib:drawable-height xwindow) (- max-height double-border title-height)))
+    (update-decorate (decorate window))
     (setf (size-state window) :maximized)
     (flush-display (display window))))
 
@@ -225,15 +265,22 @@
 	 (width (orig-width window))
 	 (height (orig-height window))
 	 (xmaster (xmaster window))
-	 (xwindow (xwindow window)))
+	 (xframe (xframe window))
+	 (xwindow (xwindow window))
+	 (double-border (* 2 *default-window-border-width*))
+	 (title-height (title-height (decorate window))))
     (xlib:with-state (xmaster)
       (setf (xlib:drawable-x xmaster) x
 	    (xlib:drawable-y xmaster) y
 	    (xlib:drawable-width xmaster) width
 	    (xlib:drawable-height xmaster) height))
+    (xlib:with-state (xframe)
+      (setf (xlib:drawable-width xframe) (- width double-border)
+	    (xlib:drawable-height xframe) (- height double-border title-height)))
     (xlib:with-state (xwindow)
-      (setf (xlib:drawable-width xwindow) width
-	    (xlib:drawable-height xwindow) height))
+      (setf (xlib:drawable-width xwindow) (- width double-border)
+	    (xlib:drawable-height xwindow) (- height double-border title-height)))
+    (update-decorate (decorate window))
     (setf (size-state window) :normal)
     (flush-display (display window))))
 
@@ -249,35 +296,121 @@
     (setf (orig-x window) x
 	  (orig-y window) y)))
 
+(defmethod moveresize-window ((window window) &key x y width height)
+  (let ((xmaster (xmaster window)))
+    (xlib:with-state (xmaster)
+      (if x (setf (xlib:drawable-x xmaster) x))
+      (if y (setf (xlib:drawable-y xmaster) y))
+      (if width (setf (xlib:drawable-width xmaster) width))
+      (if height (setf (xlib:drawable-height xmaster) height)))
+    (if x (setf (orig-x window) x))
+    (if y (setf (orig-y window) y))
+    (if width (setf (orig-width window) width))
+    (if height (setf (orig-height window) height))
+    (when (or width height)
+      (let ((xframe (xframe window))
+	    (xwindow (xwindow window))
+	    (double-border (* 2 *default-window-border-width*))
+	    (title-height (title-height (decorate window))))
+	(xlib:with-state (xframe)
+	  (if width (setf (xlib:drawable-width xframe) (- width double-border)))
+	  (if height (setf (xlib:drawable-height xframe) (- height double-border title-height))))
+	(xlib:with-state (xwindow)
+	  (if width (setf (xlib:drawable-width xwindow) (- width double-border)))
+	  (if height (setf (xlib:drawable-height xwindow) (- height double-border title-height))))
+	(update-decorate (decorate window))))))
+
 (let ((target-window nil)
-      (offset-x nil)
-      (offset-y nil))
-  (defun set-drag-move-window (window)
-    (setf target-window window)
-    (if window
-	(multiple-value-setq (offset-x offset-y) (xlib:query-pointer (xmaster window)))
-	(setf offset-x nil
-	      offset-y nil)))
-  (defun drag-move-window (x y)
+      (p-x nil)
+      (p-y nil)
+      (init-x nil)
+      (init-y nil)
+      (init-width nil)
+      (init-height nil)
+      (operation nil))			;:move :nw-resize ... :left-resize
+  (defun init-drag-moveresize (window pointer-x pointer-y type)
+    (setf target-window window
+	  p-x pointer-x
+	  p-y pointer-y
+	  init-x (x window)
+	  init-y (y window)
+	  init-width (width window)
+	  init-height (height window)
+	  operation type))
+  (defun reset-drag-moveresize ()
+    (setf target-window nil
+	  p-x nil
+	  p-y nil
+	  init-x nil
+	  init-y nil
+	  init-width nil
+	  init-height nil
+	  operation nil))
+  (defun drag-moveresize-window (x y)
+    (labels ((mid (a b c)
+	       (second (sort (list a b c) #'<))))
     (when target-window
       (let* ((screen (screen target-window))
 	     (min-x (x screen))
 	     (min-y (y screen))
 	     (max-x (+ min-x (width screen)))
 	     (max-y (+ min-y (height screen)))
-	     (new-x (second (sort (list min-x (- x offset-x) max-x) #'<)))
-	     (new-y (second (sort (list min-y (- y offset-y) max-y) #'<))))
-	(move-window target-window new-x new-y)
-	(flush-display (display screen))))))
+	     (diff-x (- x p-x))
+	     (diff-y (- y p-y))
+	     (min-width (min-width target-window))
+	     (min-height (min-height target-window))
+	     (new-x (mid min-x (+ init-x diff-x) max-x))
+	     (new-y (mid min-y (+ init-y diff-y) max-y)))
+	(dformat 2 "now pointer at (~a, ~a)" x y)
+	(case operation
+	  (:move (moveresize-window target-window :x new-x :y new-y))
+	  (:nw-resize (moveresize-window target-window
+					 :x new-x :y new-y
+					 :width (mid min-width
+						     (- init-width diff-x)
+						     (- (+ init-x init-width) (x screen)))
+					 :height (mid min-height
+						      (- init-height diff-y)
+						      (- (+ init-y init-height) (y screen)))))
+	  (:top-resize (moveresize-window target-window
+					  :y new-y
+					  :height (mid min-height
+						       (- init-height diff-y)
+						       (- (+ init-y init-height) (y screen)))))
+	  (:ne-resize (moveresize-window target-window
+					 :y new-y
+					 :width (mid min-width (+ init-width diff-x) (- max-x init-x))
+					 :height (mid min-height
+						       (- init-height diff-y)
+						       (- (+ init-y init-height) (y screen)))))
+	  (:right-resize (moveresize-window target-window
+					    :width (mid min-width (+ init-width diff-x) (- max-x init-x))))
+	  (:se-resize (moveresize-window target-window
+					 :width (mid min-width (+ init-width diff-x) (- max-x init-x))
+					 :height (mid min-height (+ init-height diff-y) (- max-y init-y))))
+	  (:bottom-resize (moveresize-window target-window
+					     :height (mid min-height (+ init-height diff-y) (- max-y init-y))))
+	  (:sw-resize (moveresize-window target-window
+					 :x new-x
+					 :width (mid min-width
+						     (- init-width diff-x)
+						     (- (+ init-x init-width) (x screen)))
+					 :height (mid min-height (+ init-height diff-y) (- max-y init-y))))
+	  (:left-resize (moveresize-window target-window
+					   :x new-x
+					   :width (mid min-width
+						     (- init-width diff-x)
+						     (- (+ init-x init-width) (x screen))))))
+	(flush-display (display screen)))))))
 
-(defmethod grab-key ((win window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
-  (xlib:grab-key (xmaster win) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
+(defmethod grab-key ((window window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
+  (xlib:grab-key (xmaster window) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
 (defmethod ungrab-key ((window window) keycode &key (modifiers 0))
   (xlib:ungrab-key (xmaster window) keycode :modifiers modifiers))
 
-(defmethod grab-keyboard ((win window) &key owner-p sync-pointer-p sync-keyboard-p)
-  (xlib:grab-keyboard (xmaster win) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
+(defmethod grab-keyboard ((window window) &key owner-p sync-pointer-p sync-keyboard-p)
+  (xlib:grab-keyboard (xmaster window) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
 (defun get-wm-state (window)
   (car (xlib:get-property (xwindow window) :WM_STATE)))
@@ -285,14 +418,35 @@
 (defun set-wm-state (xwindow state)
   (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
 
-(defun set-gollum-master (xwindow)
-  (xlib:change-property xwindow :__GOLLUM_MASTER '(1) :__GOLLUM_MASTER 32))
+(defun set-internal-window-type (xwindow type)
+  (xlib:change-property xwindow :__GOLLUM_INTERNAL (list (case type
+							   (:master 1)
+							   (:title 2)
+							   (:border-nw 3)
+							   (:border-top 4)
+							   (:border-ne 5)
+							   (:border-right 6)
+							   (:border-se 7)
+							   (:border-bottom 8)
+							   (:border-sw 9)
+							   (:border-left 10)
+							   (:frame 11))) :__GOLLUM_INTERNAL 32))
 
-(defun gollum-master-p (xwindow)
-  (let ((gollum-master (car (xlib:get-property xwindow :__GOLLUM_MASTER))))
-    (if gollum-master
-	(plusp gollum-master)
-	nil)))
+(defun get-internal-window-type (xwindow)
+  (let ((type (car (xlib:get-property xwindow :__GOLLUM_INTERNAL))))
+    (case type
+      (1 :master)
+      (2 :title)
+      (3 :border-nw)
+      (4 :border-top)
+      (5 :border-ne)
+      (6 :border-right)
+      (7 :border-se)
+      (8 :border-bottom)
+      (9 :border-sw)
+      (10 :border-left)
+      (11 :frame)
+      (t nil))))
 
 (defun translate-coordinates (src src-x src-y dst)
   (xlib:translate-coordinates (xmaster src) src-x src-y (xmaster dst)))
