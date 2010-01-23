@@ -41,11 +41,13 @@
 
 (defparameter *event-handlers* (make-array 64 :initial-element nil))
 
+;; warning: we must consume all kinds of events as soon as possible or gollum will be very lag
+
 (defmacro define-event-handler (event-key actual-keys &body body)
   (let ((fn-name (gensym)))
     `(labels ((,fn-name (&rest event-slots &key display event-key send-event-p ,@actual-keys &allow-other-keys)
 		(declare (ignore display event-key event-slots send-event-p))
-		(dformat 2 "get into ~a" ,event-key)
+		(dformat 9 "get into ~a" ,event-key)
 		(handler-bind ((xlib:window-error (lambda (c)
 						    (declare (ignore c))
 						    (invoke-restart 'ignore)))
@@ -99,36 +101,58 @@
   (update-event-time time)
   t)
 
-(defun check-peek-event (xdisplay)
-    (xlib:event-case (xdisplay :peek-p t :timeout nil)
-      (t (event-key)
-	 event-key)))
+(defun peek-event (xdisplay)
+  (xlib:event-case (xdisplay :peek-p t :timeout nil)
+    (t (event-key)
+       event-key)))
 
 (defun pointer-current-xwindow (xwindow)
   (multiple-value-bind (x y same-screen-p child state-mask root-x root-y root) (xlib:query-pointer (xlib:drawable-root xwindow))
     (declare (ignore x y same-screen-p state-mask root-x root-y root))
     child))
 
-(define-event-handler :button-press (state code window time)
-  (let ((xcurrent (pointer-current-xwindow window))
-	(state-keys (xlib:make-state-keys state)))
-    (update-event-time time)
-    (when (and (= code 1) xcurrent)		;FIXME:should be customizable
-      (if (eql (check-peek-event (xdisplay *display*)) :motion-notify)
-	  (progn
-	    (set-drag-move-window (xmaster-window xcurrent *display*))
-	    (dformat 1 "target window set")))))
+(defun find-parent (xwindow)
+  (multiple-value-bind (children parent root) (xlib:query-tree xwindow)
+    (declare (ignore children root))
+    parent))
+
+(define-event-handler :button-press (code window root-x root-y time)
+  (labels ((find-window (xwindow type)
+	     (case type
+	       ((:title :border-right :border-left :border-top :border-bottom :border-nw :border-ne :border-sw :border-se)
+		(xmaster-window (find-parent xwindow) *display*)))))
+    (let* ((type (get-internal-window-type window))
+	   (win (find-window window type)))
+      (update-event-time time)
+      (when (= code 1)		;FIXME:should be customizable
+	(init-drag-moveresize win root-x root-y (case type
+						  (:title :move)
+						  (:border-nw :nw-resize)
+						  (:border-top :top-resize)
+						  (:border-ne :ne-resize)
+						  (:border-right :right-resize)
+						  (:border-se :se-resize)
+						  (:border-bottom :bottom-resize)
+						  (:border-sw :sw-resize)
+						  (:border-left :left-resize)))
+	(if (eql type :title)
+	    (xlib:grab-pointer (xmaster win) '(:button-motion :button-release) :cursor (cursor-drag-move *display*))
+	    (xlib:grab-pointer (xmaster win) '(:button-motion :button-release))))))
   t)
 
 (define-event-handler :button-release (time)
   (update-event-time time)
+  (reset-drag-moveresize)
+  (xlib:ungrab-pointer (xdisplay *display*))
   t)
 
 (define-event-handler :motion-notify (root-x root-y time)
   (update-event-time time)
-  (drag-move-window root-x root-y)
-  (if (eql (check-peek-event (xdisplay *display*)) :button-release)
-      (set-drag-move-window nil))
+  (drag-moveresize-window root-x root-y)
+  ;; (when (eql (peek-event (xdisplay *display*)) :button-release)
+  ;;   (dformat 1 "drag done")
+  ;;   (set-drag-moveresize-window nil)
+  ;;   (xlib:ungrab-pointer (xdisplay *display*)))
   t)
 
 (define-event-handler :enter-notify (window mode kind time)
@@ -158,17 +182,21 @@
 
 (define-event-handler :exposure (window count)
   (if (zerop count)
-      (multiple-value-bind (children parent root) (xlib:query-tree window)
-	(declare (ignore children root))
-	(if (gollum-master-p parent)
-	    (update-title (title (xmaster-window parent *display*)))))))
+      (if (eql :title (get-internal-window-type window))
+	  (update-title (decorate (xmaster-window (find-parent window) *display*)))))
+  t)
 
 ;; Window State Events
 (define-event-handler :circulate-notify ()
   t)
 
-(define-event-handler :configure-notify ()
-  t)
+(define-event-handler :configure-notify (window x y width height)
+  (when (eql (get-internal-window-type window) :master)
+    (dformat 2 "window-type: ~a :configure-notify received, x: ~a y: ~a width: ~a height: ~a" (get-internal-window-type window) x y width height))
+  ;; (when (eql :master (get-internal-window-type window))
+  ;;   (dformat 1 "master configure-notify received")
+  ;;   (update-decorate (decorate (xmaster-window window *display*))))
+   t)
 
 (defun probe-xwindow (xwindow)
   (handler-bind ((xlib:window-error (lambda (c)
@@ -181,7 +209,7 @@
   (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root parent))))
     (let* ((root (xmaster-window (xlib:drawable-root parent) *display*))
 	   (screen (screen root)))
-      (if (not (gollum-master-p window))
+      (if (not (eql (get-internal-window-type window) :master))
 	  (prepare-new-window window parent screen))))
   t)
 
