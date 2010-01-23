@@ -217,7 +217,7 @@
       (remhash (id ws) (workspaces s)))))
 
 (defmethod xwindow-window (xwin (obj screen))
-  "XWIN is an xlib window,we find the corresponding window."
+  "xwin is an xlib window,we find the corresponding window."
   (when xwin
     (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (withdrawn-windows obj))
       (and exist-p (xlib:window-equal xwin (xwindow win)) win))))
@@ -234,24 +234,39 @@
 
 (defun update-screen-window-geometry (window)
   (let* ((xmaster (xmaster window))
+	 (xframe (xframe window))
+	 (xwindow (xwindow window))
 	 (screen (screen window))
-	 (old-x (or (orig-x window) (xlib:drawable-x xmaster)))
-	 (old-y (or (orig-y window) (xlib:drawable-y xmaster)))
-	 (old-width (or (orig-width window) (xlib:drawable-width xmaster)))
-	 (old-height (or (orig-height window) (xlib:drawable-height xmaster)))
+;	 (old-x (or (orig-x window) (xlib:drawable-x xmaster)))
+;	 (old-y (or (orig-y window) (xlib:drawable-y xmaster)))
+	 (old-x (x window))
+	 (old-y (y window))
+;	 (old-width (or (orig-width window) (xlib:drawable-width xmaster)))
+;	 (old-height (or (orig-height window) (xlib:drawable-height xmaster)))
+	 (old-width (width window))
+	 (old-height (height window))
 	 (new-x (max old-x (x screen)))
 	 (new-y (max old-y (y screen)))
 	 (new-width (min old-width (width screen)))
-	 (new-height (min old-height (height screen))))
+	 (new-height (min old-height (height screen)))
+	 (double-border (* 2 *default-window-border-width*))
+	 (title-height (title-height (decorate window))))
     (xlib:with-state (xmaster)
       (setf (xlib:drawable-x xmaster) new-x
 	    (xlib:drawable-y xmaster) new-y
 	    (xlib:drawable-width xmaster) new-width
 	    (xlib:drawable-height xmaster) new-height))
-    (setf (orig-x window) new-x
-	  (orig-y window) new-y
-	  (orig-width window) new-width
-	  (orig-height window) new-height)))
+    (xlib:with-state (xframe)
+      (setf (xlib:drawable-width xframe) (- new-width double-border)
+	    (xlib:drawable-height xframe) (- new-height double-border title-height)))
+    (xlib:with-state (xwindow)
+      (setf (xlib:drawable-width xwindow) (- new-width double-border)
+	    (xlib:drawable-height xwindow) (- new-height double-border title-height)))))
+
+    ;; (setf (orig-x window) new-x
+    ;; 	  (orig-y window) new-y
+    ;; 	  (orig-width window) new-width
+    ;; 	  (orig-height window) new-height)))
 
 (defun update-screen-windows-geometry (screen)
   (maphash (lambda (id window)
@@ -260,6 +275,7 @@
 
 (defvar *toplevel-window-event* '(:focus-change
 				  :button-motion
+				  :button-release
 				  :enter-window
 				  :substructure-notify
 				  :substructure-redirect))
@@ -269,11 +285,15 @@
     (let* ((xmaster (xlib:create-window :parent xroot
 					:x 0 :y 0 :width 1 :height 1
 					:border (alloc-color *default-window-border* screen)
-					:border-width *default-window-border-width*
+					:border-width 0 ;use xwindow to implement border so that master can be resized with mouse
 					:event-mask *toplevel-window-event*))
 	   (id (xlib:window-id xwindow))
+	   (xframe (xlib:create-window :parent xmaster
+				       :x 0 :y 0 :width 1 :height 1
+				       :border-width 0))
 	   (window (make-instance 'window
 				  :id id
+				  :xframe xframe
 				  :xwindow xwindow
 				  :xmaster xmaster
 				  :wm-name (xlib:wm-name xwindow)
@@ -282,38 +302,57 @@
 				  :wm-class wm-class
 				  :map-state :unmapped)))
       (set-wm-state xwindow 0)
-      (set-gollum-master xmaster)
+      (set-internal-window-type xmaster :master)
+      (set-internal-window-type xframe :frame)
+      (xlib:map-window xframe)
       (setf (screen window) screen)	;FIXME: dirty hack
       (add-window window *display*))))
 
 (defun unwithdraw (xwindow)
   (let* ((window (xwindow-window xwindow *display*))
 	 (xmaster (xmaster window))
+	 (xframe (xframe window))
 	 (screen (screen window))
 	 (workspace (workspace window))
-	 (normal-hints (xlib:wm-normal-hints xwindow))
+	 (normal-hints (xlib:wm-normal-hints xwindow)) ;FIXME: respect the hints
+	 (min-width (or (xlib:wm-size-hints-min-width normal-hints) (xlib:wm-size-hints-base-width normal-hints) 1))
+	 (min-height (or (xlib:wm-size-hints-min-height normal-hints) (xlib:wm-size-hints-base-height normal-hints) 1))
 	 (x (xlib:drawable-x xwindow))
 	 (y (xlib:drawable-y xwindow))
 	 (width (xlib:drawable-width xwindow))
-	 (height (xlib:drawable-height xwindow)))
-    (unless (title window)
-      (setf (title window) (make-decorate window)))
+	 (height (xlib:drawable-height xwindow))
+	 (double-border (* 2 *default-window-border-width*))
+	 title-height)
+    (unless (decorate window)
+      (setf (decorate window) (make-decorate window)))
+    (setf title-height (title-height (decorate window)))
+    (setf (min-width window) (+ min-width double-border)
+	  (min-height window) (+ min-height double-border title-height))
     (xlib:with-state (xmaster)
       (setf (xlib:drawable-x xmaster) x
 	    (xlib:drawable-y xmaster) y
-	    (xlib:drawable-width xmaster) width
-	    (xlib:drawable-height xmaster) (+ height (height (title window)))))
+	    (xlib:drawable-width xmaster) (+ width double-border)
+	    (xlib:drawable-height xmaster) (+ height title-height double-border)))
+    (xlib:with-state (xframe)
+      (setf (xlib:drawable-x xframe) *default-window-border-width*
+	    (xlib:drawable-y xframe) (+ title-height *default-window-border-width*)
+	    (xlib:drawable-width xframe) width
+	    (xlib:drawable-height xframe) height))
+    (setf (orig-x window) x
+	  (orig-y window) y
+	  (orig-width window) (+ width double-border)
+	  (orig-height window) (+ height title-height double-border))
     (setf (xlib:drawable-border-width xwindow) 0) ;the managed window need no border
     (set-wm-state xwindow 1)		;set xwindow to normal
     (setf (id window) (xlib:window-id xmaster))
-;    (update-title (title window))
+;    (update-title (decorate window))
     (remhash (xlib:window-id xwindow) (withdrawn-windows *display*))
     (setf (gethash (xlib:window-id xmaster) (mapped-windows *display*)) window)
     (remhash (xlib:window-id xwindow) (withdrawn-windows screen))
     (setf (gethash (xlib:window-id xmaster) (mapped-windows screen)) window)
     (setf (mapped-windows workspace) (sort-by-stacking-order (list* window (mapped-windows workspace)) screen))
     (setf (withdrawn-windows workspace) (remove window (withdrawn-windows workspace) :test #'window-equal))
-    (xlib:reparent-window xwindow xmaster 0 (height (title window)))
+    (xlib:reparent-window xwindow xframe 0 0)
     (xlib:add-to-save-set xwindow)
     (update-screen-window-geometry window)
     (if (workspace-equal (workspace window) (current-workspace screen))
@@ -397,6 +436,7 @@
 (defmethod manage-existing-windows ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
 	 (window-list (xlib:query-tree xroot))) ;from bottom-most (first) to top-most (last)
+    (setf (xlib:window-cursor xroot) (cursor-default (display screen)))
     (dolist (win window-list)
       (unless (eql :on (xlib:window-override-redirect win))
 	(manage-existing-window win xroot screen)))))
