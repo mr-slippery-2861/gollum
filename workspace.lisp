@@ -74,26 +74,26 @@
 (defmethod workspace-equal ((w1 workspace) (w2 workspace))
   (= (id w1) (id w2)))
 
-(defmethod add-window ((window window) (obj workspace))
+(defmethod add-window ((window toplevel-window) (obj workspace))
   (case (get-wm-state window)
-    (0 (push window (withdrawn-windows obj)))
-    (1 (setf (mapped-windows obj) (sort-by-stacking-order (list* window (mapped-windows obj)) (screen obj))))) ;now the mapped-windows are in stacking order
+    (:withdrawn (push window (withdrawn-windows obj)))
+    (:normal (setf (mapped-windows obj) (sort-by-stacking-order (list* window (mapped-windows obj)) (screen obj))))) ;now the mapped-windows are in stacking order
   (setf (workspace window) obj)
   (if (workspace-equal obj (current-workspace (screen window)))
 	(map-workspace-window window)
 	(unmap-workspace-window window)))
 
-(defmethod delete-window ((window window) (obj workspace))
+(defmethod delete-window ((window toplevel-window) (obj workspace))
   (unmap-workspace-window window)
   (setf (workspace window) nil)
   (setf (withdrawn-windows obj) (remove window (withdrawn-windows obj) :test #'window-equal))
   (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))) ;remove doesn't break the stacking order
 
-(defmethod move-window-to-workspace ((win window) (ws workspace))
-  (let ((source (find-workspace-by-id (workspace win) (workspaces (screen win))))
-	(dest ws))
-    (delete-window win source)
-    (add-window win dest)))
+(defmethod move-window-to-workspace ((window toplevel-window) (workspace workspace))
+  (let ((source (find-workspace-by-id (workspace window) (workspaces (screen window))))
+	(dest workspace))
+    (delete-window window source)
+    (add-window window dest)))
 
 (defmethod map-workspace ((workspace workspace))
   (mapc #'map-workspace-window (mapped-windows workspace)))
@@ -119,7 +119,7 @@
   (length (mapped-windows workspace)))
 
 ;; FIXME:should we set input focus when raising or circulating window?
-(defmethod workspace-raise-window ((workspace workspace) (window window))
+(defmethod workspace-raise-window ((workspace workspace) (window toplevel-window))
   (let ((windows (mapped-windows workspace)))
     (when (find window windows :test #'window-equal)
       (let* ((id (id window))

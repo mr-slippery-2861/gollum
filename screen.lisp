@@ -107,26 +107,26 @@
 (defvar *internal-window-vertical-padding* 1)
 (defvar *internal-window-horizontal-padding* 2)
 
-(defgeneric make-internal-window (s))
+(defgeneric make-internal-window (screen))
 
 (defgeneric manage-screen-root (screen))
 
-(defgeneric manage-existing-windows (s))
+(defgeneric manage-existing-windows (screen))
 
-(defgeneric set-current-workspace (ws s)
+(defgeneric set-current-workspace (workspace screen)
   (:documentation "set a workspace as current workspace"))
 
-(defgeneric switch-to-workspace (ws s)
+(defgeneric switch-to-workspace (workspace screen)
   (:documentation "as is"))
 
-(defgeneric raise-workspace-window (win s)
+(defgeneric raise-workspace-window (window screen)
   (:documentation "raise the window,switch to the window's workspace if needed"))
 
-(defgeneric add-workspace-to-screen (name s))
+(defgeneric add-workspace-to-screen (name screen))
 
-(defgeneric delete-workspace-from-screen (ws s))
+(defgeneric delete-workspace-from-screen (workspace screen))
 
-(defgeneric xwindow-window (xwin obj))
+(defgeneric xwindow-window (xwindow obj))
 
 (defgeneric screen-message (screen message &optional time-out-p))
 
@@ -148,14 +148,14 @@
 (defun (setf current-workspace) (workspace screen)
   (setf (screen-current-workspace screen) workspace))
 
-(defmethod make-internal-window ((s screen))
-  (xlib:create-window :parent (xwindow (root s))
+(defmethod make-internal-window ((screen screen))
+  (xlib:create-window :parent (xwindow (root screen))
 		      :x 0 :y 0 :width 1 :height 1
 		      :override-redirect :on
 		      :save-under :on))
 
-(defmethod set-current-workspace ((ws workspace) (s screen))
-  (setf (current-workspace s) ws))
+(defmethod set-current-workspace ((workspace workspace) (screen screen))
+  (setf (current-workspace screen) workspace))
 
 (defmethod switch-to-workspace ((workspace workspace) (screen screen))
   (unless (workspace-equal (current-workspace screen) workspace)
@@ -165,25 +165,25 @@
     (workspace-set-focus workspace (current-focus workspace))
     (flush-display (display screen))))
 
-(defmethod raise-workspace-window ((win window) (s screen))
-  (let ((ws (workspace win)))
-    (unless (workspace-equal ws (current-workspace s))
-      (switch-to-workspace ws s))
-    (raise-window win)))
+(defmethod raise-workspace-window ((window toplevel-window) (screen screen))
+  (let ((workspace (workspace window)))
+    (unless (workspace-equal workspace (current-workspace screen))
+      (switch-to-workspace workspace screen))
+    (raise-window window)))
 
 (defun sort-by-stacking-order (window-list screen)
   (sort window-list #'< :key (lambda (window)
 			       (position (id window) (stacking-orderd screen) :test #'=))))
 
-(defmethod add-window ((window window) (obj screen))
+(defmethod add-window ((window toplevel-window) (obj screen))
   (case (get-wm-state window)
-    (1 (setf (gethash (id window) (mapped-windows obj)) window))
-    (0 (setf (gethash (id window) (withdrawn-windows obj)) window)))
+    (:normal (setf (gethash (id window) (mapped-windows obj)) window))
+    (:withdrawn (setf (gethash (id window) (withdrawn-windows obj)) window)))
   (setf (screen window) obj)
   (setf (stacking-orderd obj) (append (stacking-orderd obj) (list (xlib:window-id (xmaster window)))))
   (add-window window (window-workspace-according-to-rule window)))
 
-(defmethod delete-window ((window window) (obj screen))
+(defmethod delete-window ((window toplevel-window) (obj screen))
   (let ((id (id window))
 	(ws (workspace window)))
     (when ws
@@ -207,20 +207,20 @@
 	      (screen workspace) screen))))
 
 ;; need to process all the windows in workspace
-(defmethod delete-workspace-from-screen ((ws workspace) (s screen))
-  (let ((nworkspace (get-nworkspace (workspaces s))))
+(defmethod delete-workspace-from-screen ((workspace workspace) (screen screen))
+  (let ((nworkspace (get-nworkspace (workspaces screen))))
     (when (> nworkspace 1)
-      (let* ((id (id ws))
+      (let* ((id (id workspace))
 	     (id-1 (if (= id 1) 2 (1- id))))
-	(dolist (win (mapped-windows ws))
-	  (move-window-to-workspace win (find-workspace-by-id id-1))))
-      (remhash (id ws) (workspaces s)))))
+	(dolist (window (mapped-windows workspace))
+	  (move-window-to-workspace window (find-workspace-by-id id-1 (workspaces screen)))))
+      (remhash (id workspace) (workspaces screen)))))
 
-(defmethod xwindow-window (xwin (obj screen))
+(defmethod xwindow-window (xwindow (obj screen))
   "xwin is an xlib window,we find the corresponding window."
-  (when xwin
-    (multiple-value-bind (win exist-p) (gethash (xlib:window-id xwin) (withdrawn-windows obj))
-      (and exist-p (xlib:window-equal xwin (xwindow win)) win))))
+  (when xwindow
+    (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (withdrawn-windows obj))
+      (and exist-p (xlib:window-equal xwindow (xwindow window)) window))))
 
 (defun max-or (num1 num2)
   (if (and num1 num2)
@@ -237,12 +237,8 @@
 	 (xframe (xframe window))
 	 (xwindow (xwindow window))
 	 (screen (screen window))
-;	 (old-x (or (orig-x window) (xlib:drawable-x xmaster)))
-;	 (old-y (or (orig-y window) (xlib:drawable-y xmaster)))
 	 (old-x (x window))
 	 (old-y (y window))
-;	 (old-width (or (orig-width window) (xlib:drawable-width xmaster)))
-;	 (old-height (or (orig-height window) (xlib:drawable-height xmaster)))
 	 (old-width (width window))
 	 (old-height (height window))
 	 (new-x (max old-x (x screen)))
@@ -262,11 +258,6 @@
     (xlib:with-state (xwindow)
       (setf (xlib:drawable-width xwindow) (- new-width double-border)
 	    (xlib:drawable-height xwindow) (- new-height double-border title-height)))))
-
-    ;; (setf (orig-x window) new-x
-    ;; 	  (orig-y window) new-y
-    ;; 	  (orig-width window) new-width
-    ;; 	  (orig-height window) new-height)))
 
 (defun update-screen-windows-geometry (screen)
   (maphash (lambda (id window)
@@ -291,29 +282,28 @@
 	   (xframe (xlib:create-window :parent xmaster
 				       :x 0 :y 0 :width 1 :height 1
 				       :border-width 0))
-	   (window (make-instance 'window
+	   (window (make-instance 'toplevel-window
 				  :id id
 				  :xframe xframe
 				  :xwindow xwindow
 				  :xmaster xmaster
-				  :wm-name (xlib:wm-name xwindow)
 				  :protocols (xlib:wm-protocols xwindow)
 				  :wm-instance wm-instance
 				  :wm-class wm-class
 				  :map-state :unmapped)))
-      (set-wm-state xwindow 0)
+      (set-wm-state-1 xwindow :withdrawn)
       (set-internal-window-type xmaster :master)
       (set-internal-window-type xframe :frame)
       (xlib:map-window xframe)
       (setf (screen window) screen)	;FIXME: dirty hack
       (add-window window *display*))))
 
-(defun unwithdraw (xwindow)
+(defun normalize (xwindow)
   (let* ((window (xwindow-window xwindow *display*))
 	 (xmaster (xmaster window))
 	 (xframe (xframe window))
 	 (screen (screen window))
-	 (workspace (workspace window))
+	 (hints (xlib:wm-hints xwindow))
 	 (normal-hints (xlib:wm-normal-hints xwindow)) ;FIXME: respect the hints
 	 (min-width (or (xlib:wm-size-hints-min-width normal-hints) (xlib:wm-size-hints-base-width normal-hints) 1))
 	 (min-height (or (xlib:wm-size-hints-min-height normal-hints) (xlib:wm-size-hints-base-height normal-hints) 1))
@@ -322,15 +312,16 @@
 	 (width (xlib:drawable-width xwindow))
 	 (height (xlib:drawable-height xwindow))
 	 (double-border (* 2 *default-window-border-width*))
-	 title-height)
-    (unless (decorate window)
-      (setf (decorate window) (make-decorate window)))
-    (setf title-height (title-height (decorate window)))
-    (setf (min-width window) (+ min-width double-border)
+	 (decorate (if (decorate window) (decorate window) (make-decorate window)))
+	 (title-height (title-height decorate)))
+    (setf (decorate window) decorate
+	  (min-width window) (+ min-width double-border)
 	  (min-height window) (+ min-height double-border title-height))
+    ;; (set-xwindow-geometry xmaster :x (- x *default-window-border-width*) :y (- y *default-window-border-width* title-height) :width (+ width double-border) :height (+ height title-height double-border))
+    ;; (set-xwindow-geometry xframe :x *default-window-border-width* :y (+ title-height *default-window-border-width*) :width width :height height)
     (xlib:with-state (xmaster)
-      (setf (xlib:drawable-x xmaster) x
-	    (xlib:drawable-y xmaster) y
+      (setf (xlib:drawable-x xmaster) (- x *default-window-border-width*)
+	    (xlib:drawable-y xmaster) (- y *default-window-border-width* title-height)
 	    (xlib:drawable-width xmaster) (+ width double-border)
 	    (xlib:drawable-height xmaster) (+ height title-height double-border)))
     (xlib:with-state (xframe)
@@ -338,99 +329,96 @@
 	    (xlib:drawable-y xframe) (+ title-height *default-window-border-width*)
 	    (xlib:drawable-width xframe) width
 	    (xlib:drawable-height xframe) height))
-    (setf (orig-x window) x
-	  (orig-y window) y
-	  (orig-width window) (+ width double-border)
-	  (orig-height window) (+ height title-height double-border))
+    (setf (last-x window) (- x *default-window-border-width*)
+	  (last-y window) (- y *default-window-border-width* title-height)
+	  (last-width window) (+ width double-border)
+	  (last-height window) (+ height title-height double-border))
     (setf (xlib:drawable-border-width xwindow) 0) ;the managed window need no border
-    (set-wm-state xwindow 1)		;set xwindow to normal
-    (setf (id window) (xlib:window-id xmaster))
-;    (update-title (decorate window))
+    (set-wm-state window :normal (xlib:wm-hints-icon-window hints)) ;FIXME:we need to supply an icon if the client didn't set one
+    (update-screen-window-geometry window)
+    (if (workspace-equal (workspace window) (current-workspace screen))
+	(map-workspace-window window))
+    (if (eql (xlib:wm-hints-input hints) :on) ;icccm
+	(workspace-set-focus (workspace window) window)
+	(if (find :WM_TAKE_FOCUS (protocols window))
+	    (send-client-message window :WM_PROTOCOLS :WM_TAKE_FOCUS (get-event-time))))))
+
+(defun withdrawn->normal (xwindow)
+  (normalize xwindow))
+
+;; FIXME:complete this function
+(defun withdrawn->iconic (xwindow)
+  (let ((hints (xlib:wm-hints xwindow)))
+    (set-wm-state-1 xwindow :iconic (xlib:wm-hints-icon-window hints))))
+
+(defun unwithdraw (xwindow)
+  (let* ((window (xwindow-window xwindow *display*))
+	 (xmaster (xmaster window))
+	 (xframe (xframe window))
+	 (screen (screen window))
+	 (workspace (workspace window))
+	 (hints (xlib:wm-hints xwindow)))
+    (xlib:reparent-window xwindow xframe 0 0)
+    (xlib:add-to-save-set xwindow)    
+    (case (xlib:wm-hints-initial-state hints)
+      (:normal (withdrawn->normal xwindow))
+      (:iconic (withdrawn->iconic xwindow)))
+    (setf (id window) (xlib:window-id xmaster))	  ;FIXME: (id window) is confusing
     (remhash (xlib:window-id xwindow) (withdrawn-windows *display*))
     (setf (gethash (xlib:window-id xmaster) (mapped-windows *display*)) window)
     (remhash (xlib:window-id xwindow) (withdrawn-windows screen))
     (setf (gethash (xlib:window-id xmaster) (mapped-windows screen)) window)
     (setf (mapped-windows workspace) (sort-by-stacking-order (list* window (mapped-windows workspace)) screen))
-    (setf (withdrawn-windows workspace) (remove window (withdrawn-windows workspace) :test #'window-equal))
-    (xlib:reparent-window xwindow xframe 0 0)
-    (xlib:add-to-save-set xwindow)
-    (update-screen-window-geometry window)
-    (if (workspace-equal (workspace window) (current-workspace screen))
-	(map-workspace-window window))
-    (if (should-grab-input window)
-	(workspace-set-focus (workspace window) window)
-	(if (find :WM_TAKE_FOCUS (protocols window))
-	    (send-client-message window :WM_PROTOCOLS :WM_TAKE_FOCUS (get-event-time))))))
+    (setf (withdrawn-windows workspace) (remove window (withdrawn-windows workspace) :test #'window-equal))))
+
+;; Reparenting window managers must unmap the client's window when it is in the Iconic state, even if an ancestor window being unmapped renders the client's window unviewable
+;; FIXME:complete this function
+(defun normal->iconic (xwindow)
+  (let ((hints (xlib:wm-hints xwindow)))
+    (set-wm-state-1 xwindow :iconic (xlib:wm-hints-icon-window hints))))
+
+(defun normal->withdrawn (xwindow)
+  (let* ((window (xwindow-window xwindow *display*))
+	 (xmaster (xmaster window))
+	 (screen (screen window))
+	 (workspace (workspace window))
+	 (hints (xlib:wm-hints xwindow)))
+    (setf (id window) (xlib:window-id xwindow))
+    (remhash (xlib:window-id xmaster) (mapped-windows *display*))
+    (setf (gethash (xlib:window-id xwindow) (withdrawn-windows *display*)) window)
+    (remhash (xlib:window-id xmaster) (mapped-windows screen))
+    (setf (gethash (xlib:window-id xwindow) (withdrawn-windows screen)) window)
+    (setf (withdrawn-windows workspace) (list* window (withdrawn-windows workspace)))
+    (setf (mapped-windows workspace) (remove window (mapped-windows workspace) :test #'window-equal))
+    (unmap-window window)
+    (xlib:unmap-window xwindow)
+    (xlib:reparent-window xwindow (xlib:drawable-root xwindow) 0 0)))
+
+(defun iconic->normal (xwindow)
+  (normalize xwindow))
+
+;; FIXME:complete this function
+(defun iconic->withdrawn (xwindow)
+  )
 
 (defun manage-existing-window (xwindow xroot screen)
   (prepare-new-window xwindow xroot screen)
   (if (not (eql (xlib:window-map-state xwindow) :unmapped))
       (unwithdraw xwindow)))
   
-;; this is lowerlevel function
-;; (defun manage-new-window (xwindow xroot screen)
-;;   (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
-;;     (let* ((map-state (xlib:window-map-state xwindow))
-;; 	   (normal-hints (xlib:wm-normal-hints xwindow))
-;; 	   (x (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-x normal-hints))
-;; 		  (xlib:drawable-x xwindow)))
-;; 	   (y (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-y normal-hints))
-;; 		  (xlib:drawable-y xwindow)))
-;; 	   (width (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-width normal-hints))
-;; 		      (xlib:drawable-width xwindow)))
-;; 	   (height (or (and (xlib:wm-size-hints-p normal-hints) (xlib:wm-size-hints-height normal-hints))
-;; 		       (xlib:drawable-height xwindow)))
-;; 	   (window (make-instance 'window
-;; 				  :xwindow xwindow
-;; 				  :map-state :unmapped
-;; 				  :orig-x x
-;; 				  :orig-y y
-;; 				  :orig-width width
-;; 				  :orig-height height))
-;; 	   (pwindow (root screen)))
-;;       (setf (xlib:drawable-border-width xwindow) 0)
-;;       (let ((xmaster (xlib:create-window :parent xroot
-;; 					 :x x
-;; 					 :y y
-;; 					 :width width
-;; 					 :height height
-;; 					 :border (alloc-color *default-window-border* screen)
-;; 					 :border-width *default-window-border-width*
-;; 					 :override-redirect :on
-;; 					 :event-mask *toplevel-window-event*)))
-;; 	(setf (xlib:window-override-redirect xmaster) :off)
-;; 	(set-wm-state xmaster (case (xlib:window-map-state xwindow) (:unmapped 0) (:viewable 1)))
-;; 	(xlib:reparent-window xwindow xmaster 0 0)
-;; 	(setf (xmaster window) xmaster
-;; 	      (id window) (xlib:window-id xmaster)))
-;;       (setf (toplevel-p window) t
-;; 	    (parent window) pwindow
-;; 	    (wm-name window) (xlib:wm-name xwindow)
-;; 	    (wm-instance window) wm-instance
-;; 	    (wm-class window) wm-class
-;; 	    (protocols window) (xlib:wm-protocols xwindow))
-;;       (dformat 0 "new window: ~a" (xlib:window-id xwindow))
-;;       (add-window window (display screen))
-;;       (add-window window screen)
-;;       (update-screen-window-geometry window))))
 
 (defvar *root-event* '(:focus-change :button-motion :substructure-redirect :substructure-notify))
 
 (defmethod manage-screen-root ((screen screen))
   (let* ((xroot (xlib:screen-root (xscreen screen)))
 	 (root-id (xlib:window-id xroot))
-	 (root (make-instance 'window
+	 (root (make-instance 'root-window
 			      :id root-id
-			      :xmaster xroot
 			      :xwindow xroot
 			      :screen screen
 			      :display (display screen)
-			      :map-state :viewable
-			      :wm-name "ROOT"
-			      :wm-class "ROOT")))
-    (setf (gethash root-id (mapped-windows screen)) root
-	  (gethash root-id (mapped-windows (display screen))) root
-	  (root screen) root
+			      :map-state :viewable)))
+    (setf (root screen) root
 	  (xlib:window-event-mask (xwindow (root screen))) *root-event*)))
 
 (defmethod manage-existing-windows ((screen screen))
@@ -506,12 +494,6 @@
 	       (declare (ignore id))
 	       (setf workspaces (append workspaces (list workspace)))) (workspaces screen))
     workspaces))
-
-(defun create-gcontext (xwin bg fg font)
-  (xlib:create-gcontext :drawable xwin
-			:background bg
-			:foreground fg
-			:font font))
 
 ;; we are in bottom-half,i.e. after the rc file loaded
 (defmethod init-screen ((screen screen))

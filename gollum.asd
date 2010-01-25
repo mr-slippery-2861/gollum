@@ -9,14 +9,16 @@
   :author "Shelling Chen - fvwmer@gmail.com"
   :maintainer "Shelling Chen - fvwmer@gmail.com"
   :description "My own wm"
-  :depends-on (:clx :bordeaux-threads)
+  :depends-on (:clx :bordeaux-threads :babel)
   :serial t
   :components ((:file "package")
 	       (:file "util")
+	       (:file "clxwrapper.lisp")
 	       (:file "command")
 	       (:file "keysymdef")
 	       (:file "keymap")
 	       (:file "window")
+	       (:file "netwm.lisp")
 	       (:file "decorate")
 	       (:file "clx-decorate")
 	       (:file "focus")

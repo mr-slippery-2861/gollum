@@ -56,7 +56,7 @@
 	 (font (output-font screen))
 	 (font-height (+ (xlib:font-ascent font) (xlib:font-descent font)))
 	 (title-height (+ *decorate-vertical-padding* font-height))
-	 (button-size (floor (* 0.618 title-height)))
+;	 (button-size (floor (* 0.618 title-height)))
 	 (w-width (xlib:drawable-width (xframe window)))
 	 (w-height (xlib:drawable-height (xframe window)))
 	 (title (title decorate)))
@@ -119,7 +119,7 @@
 	   (font (output-font screen))
 	   (width (xlib:drawable-width (xwindow window)))
 	   (font-height (+ (xlib:font-ascent font) (xlib:font-descent font)))
-	   (button-size (floor (* 0.618 font-height)))
+;	   (button-size (floor (* 0.618 font-height)))
 	   (height (+ *decorate-vertical-padding* font-height))
 	   (title (xlib:create-window :parent (xmaster window)
 				      :x *default-window-border-width*
@@ -134,16 +134,16 @@
 				      :override-redirect :on
 				      :backing-store :always
 				      :save-under :on))
-	   (x-button (xlib:create-window :parent title
-					 :x (- width font-height 5)
-					 :y (floor (/ (- height button-size 2) 2))
-					 :width button-size :height button-size
-					 :background (alloc-color "red" screen)
-					 :border (alloc-color "gray" screen)
-					 :border-width 1
-					 :event-mask '(:button-press)
-					 :override-redirect :on
-					 :save-under :on))
+	   ;; (x-button (xlib:create-window :parent title
+	   ;; 				 :x (- width font-height 5)
+	   ;; 				 :y (floor (/ (- height button-size 2) 2))
+	   ;; 				 :width button-size :height button-size
+	   ;; 				 :background (alloc-color "red" screen)
+	   ;; 				 :border (alloc-color "gray" screen)
+	   ;; 				 :border-width 1
+	   ;; 				 :event-mask '(:button-press)
+	   ;; 				 :override-redirect :on
+	   ;; 				 :save-under :on))
 	   (nw (make-border window :nw height))
 	   (top (make-border window :top height))
 	   (ne (make-border window :ne height))
@@ -161,7 +161,7 @@
       (set-internal-window-type sw :border-sw)
       (set-internal-window-type left :border-left)
       (set-internal-window-type title :title)
-      (mapc #'xlib:map-window (list x-button title nw top ne right se bottom sw left))
+      (mapc #'xlib:map-window (list title nw top ne right se bottom sw left))
       (make-instance 'clx-decorate
 		     :window window
 		     :title title
@@ -179,7 +179,7 @@
 
 (defmethod update-title ((decorate clx-decorate))
   (let ((screen (screen (window decorate))))
-    (output-to-window screen (title decorate) (output-gc screen) :keep (wm-name (window decorate)))))
+    (output-to-window screen (title decorate) (output-gc screen) :keep (get-window-name (window decorate)))))
 
 (defmethod destroy-decorate ((decorate clx-decorate))
   (xlib:destroy-subwindows (title decorate))

@@ -264,14 +264,14 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	window
 	(error 'no-such-window :xwindow xwindow))))
 
-(defmethod add-window ((window window) (obj display))
+(defmethod add-window ((window toplevel-window) (obj display))
   (case (get-wm-state window)
-    (1 (setf (gethash (id window) (mapped-windows obj)) window))
-    (0 (setf (gethash (id window) (withdrawn-windows obj)) window)))
+    (:normal (setf (gethash (id window) (mapped-windows obj)) window))
+    (:withdrawn (setf (gethash (id window) (withdrawn-windows obj)) window)))
   (setf (display window) obj)
   (add-window window (screen window)))	;FIXME: dirty hack
 
-(defmethod delete-window ((window window) (obj display))
+(defmethod delete-window ((window toplevel-window) (obj display))
   (let ((screen (screen window))
 	(id (id window)))
 ;    (setf (map-state window) :unmapped)

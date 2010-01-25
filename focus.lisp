@@ -17,10 +17,13 @@
       nil))
 
 (defun set-net-active-window (root id)
-  (xlib:change-property (xmaster root)
+  (xlib:change-property (xwindow root)
 			:_NET_ACTIVE_WINDOW
 			(list id)
 			:window 32))
+
+(defmethod set-input-focus ((focus toplevel-window) &optional (revert-to :pointer-root))
+  (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to))
 
 (defun set-focus (window)
   (if window

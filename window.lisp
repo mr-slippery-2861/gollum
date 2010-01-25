@@ -1,69 +1,18 @@
 (in-package :gollum)
 
-(defclass window ()
+(defclass window-base ()
   ((id :initarg :id
        :accessor id
        :initform nil)
-   (xmaster :initarg :xmaster		;prepare for reparenting
-	    :accessor xmaster
-	    :initform nil)
-   (xframe :initarg :xframe
-	   :accessor xframe
-	   :initform nil)
    (xwindow :initarg :xwindow		;a xlib:window instance
 	    :accessor xwindow
 	    :initform nil)
-   (workspace :initarg :workspace	;a workspace instance
-	      :accessor workspace
-	      :initform nil)
    (screen :initarg :screen
 	   :accessor screen
 	   :initform nil)
    (display :initarg :display
 	    :accessor display
 	    :initform nil)
-   (orig-x :initarg :orig-x
-	   :accessor orig-x
-	   :initform 0)
-   (orig-y :initarg :orig-y
-	   :accessor orig-y
-	   :initform 0)
-   (orig-width :initarg :orig-width
-	       :accessor orig-width
-	       :initform nil)
-   (orig-height :initarg :orig-height
-		:accessor orig-height
-		:initform nil)
-   (min-width :initarg :min-width
-	      :accessor min-width
-	      :initform 1)
-   (min-height :initarg :min-height
-	       :accessor min-height
-	       :initform 1)
-   (size-state :initarg :size-state
-	       :accessor size-state
-	       :initform :normal)
-   (decorate :initarg :decorate
-	     :accessor decorate
-	     :initform nil)
-   (wm-name :initarg :wm-name
-	     :accessor wm-name
-	     :initform nil)
-   (wm-instance :initarg :wm-instance
-		:accessor wm-instance
-		:initform nil)
-   (wm-class :initarg :wm-class
-	      :accessor wm-class
-	      :initform nil)
-   (protocols :initarg :protocols
-	      :accessor protocols
-	      :initform nil)
-   (group :initarg :group ;this is not the same as group in stumpwm at all!more like in starcraft
-	  :accessor group
-	  :initform nil)
-   (toplevel-p :initarg :toplevel-p
-	       :accessor toplevel-p
-	       :initform nil)
    (parent :initarg :parent		;this slot seems no much use
 	   :accessor parent
 	   :initform nil)
@@ -71,22 +20,69 @@
 	      :accessor map-state
 	      :initform :unmapped)))
 
-(defgeneric map-workspace-window (win)
+(defclass root-window (window-base)
+  ())
+
+(defclass toplevel-window (window-base)
+  ((xmaster :initarg :xmaster		;prepare for reparenting
+	    :accessor xmaster
+	    :initform nil)
+   (xframe :initarg :xframe
+	   :accessor xframe
+	   :initform nil)
+   (workspace :initarg :workspace	;a workspace instance
+	      :accessor workspace
+	      :initform nil)
+   (last-x :initarg :last-x
+	   :accessor last-x
+	   :initform 0)
+   (last-y :initarg :last-y
+	   :accessor last-y
+	   :initform 0)
+   (last-width :initarg :last-width
+	       :accessor last-width
+	       :initform 1)
+   (last-height :initarg :last-height
+		:accessor last-height
+		:initform 1)
+   (min-width :initarg :min-width
+	      :accessor min-width
+	      :initform 1)
+   (min-height :initarg :min-height
+	       :accessor min-height
+	       :initform 1)
+   (decorate :initarg :decorate
+	     :accessor decorate
+	     :initform nil)
+   (wm-instance :initarg :wm-instance	;icccm
+		:accessor wm-instance
+		:initform nil)
+   (wm-class :initarg :wm-class		;icccm
+	     :accessor wm-class
+	     :initform nil)
+   (protocols :initarg :protocols
+	      :accessor protocols
+	      :initform nil)
+   (group :initarg :group
+	  :accessor group
+	  :initform nil)))
+
+(defgeneric map-workspace-window (window)
   (:documentation "make a window viewable in current workspace,if it is not explicitly unmapped by user"))
 
-(defgeneric map-window (win)
+(defgeneric map-window (window)
   (:documentation "make a window viewable"))
 
-(defgeneric unmap-workspace-window (win)
+(defgeneric unmap-workspace-window (window)
   (:documentation "make a window unviewable in current workspace"))
 
-(defgeneric unmap-window (win)
+(defgeneric unmap-window (window)
   (:documentation "make a window unviewable"))
 
 (defgeneric window-equal (w1 w2)
   (:documentation "return T if w1 and w2 refer to the same window"))
 
-(defgeneric raise-window (win)
+(defgeneric raise-window (window)
   (:documentation "put the window on top of other windows"))
 
 (defgeneric circulate-window-down (window))
@@ -95,7 +91,7 @@
 
 (defgeneric set-input-focus (focus &optional revert-to))
 
-(defgeneric match-window (win &key instance class name)
+(defgeneric match-window (window &key instance class name)
   (:documentation "return T if a window satisfies the description against match-type"))
 
 (defgeneric apply-place-rule (window place-rule))
@@ -116,93 +112,81 @@
 
 (defgeneric move-window (window x y))
 
-(defgeneric grab-key (win keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
+(defgeneric grab-key (window keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p))
 
-(defgeneric ungrab-key (win keycode &key modifiers))
+(defgeneric ungrab-key (window keycode &key modifiers))
 
-(defgeneric grab-keyboard (win &key owner-p sync-pointer-p sync-keyboard-p))
+(defgeneric grab-keyboard (window &key owner-p sync-pointer-p sync-keyboard-p))
 
 (defgeneric ungrab-keyboard (display &key time))
 
 (defgeneric print-obj (obj))
 
-(defmethod x ((window window))
+(defmethod x ((window toplevel-window))
   (xlib:drawable-x (xmaster window)))
 
-(defmethod (setf x) (new-x (window window))
+(defmethod (setf x) (new-x (window toplevel-window))
   (setf (xlib:drawable-x (xmaster window)) new-x))
 
-(defmethod y ((window window))
+(defmethod y ((window toplevel-window))
   (xlib:drawable-y (xmaster window)))
 
-(defmethod (setf y) (new-y (window window))
+(defmethod (setf y) (new-y (window toplevel-window))
   (setf (xlib:drawable-y (xmaster window)) new-y))
 
-(defmethod width ((window window))
+(defmethod width ((window toplevel-window))
   (xlib:drawable-width (xmaster window)))
 
-(defmethod (setf width) (new-width (window window))
+(defmethod (setf width) (new-width (window toplevel-window))
   (setf (xlib:drawable-width (xmaster window)) new-width))
 
-(defmethod height ((window window))
+(defmethod height ((window toplevel-window))
   (xlib:drawable-height (xmaster window)))
 
-(defmethod (setf height) (new-height (window window))
+(defmethod (setf height) (new-height (window toplevel-window))
   (setf (xlib:drawable-height (xmaster window)) new-height))
 
-(defun mapped (window)
-  (eql (map-state window) :viewable))
+(defmethod mapped ((window toplevel-window))
+  (eql (xlib:window-map-state (xmaster window)) :viewable))
 
-(defun not-mapped (window)
-  (eql (map-state window) :unmapped))
+(defmethod not-mapped ((window toplevel-window))
+  (eql (xlib:window-map-state (xmaster window)) :unmapped))
 
-(defun should-be-mapped (window)
-  (plusp (get-wm-state window)))
+(defmethod should-be-mapped ((window toplevel-window))
+  (member (get-wm-state window) '(:normal :iconic)))
 
-(defmethod map-workspace-window ((window window))
-  (when (and (should-be-mapped window) (not-mapped window))
-    (xlib:map-window (xmaster window))
-    (setf (map-state window) :viewable)))
+(defmethod get-window-name ((window toplevel-window))
+  (let ((netwm-name (get-net-wm-name window)))
+    (if netwm-name
+	netwm-name
+	(wm-name window))))
 
-(defmethod map-window ((window window))
+(defmethod map-window ((window toplevel-window))
   (when (not-mapped window)
-    (xlib:map-window (xmaster window))
-    (setf (map-state window) :viewable)))
+    (xlib:map-window (xmaster window))))
 
-(defmethod unmap-workspace-window ((window window))
+(defmethod map-workspace-window ((window toplevel-window))
+  (when (should-be-mapped window)
+    (map-window window)))
+
+(defmethod unmap-window ((window toplevel-window))
   (when (mapped window)
-    (xlib:unmap-window (xmaster window))
-    (setf (map-state window) :unmapped)))
+    (xlib:unmap-window (xmaster window))))
 
-(defmethod unmap-window ((window window))
-  (when (mapped window)
-    (xlib:unmap-window (xmaster window))
-    (setf (map-state window) :unmapped)))
+(defmethod unmap-workspace-window ((window toplevel-window))
+  (unmap-window window))
 
-(defmethod window-equal ((w1 window) (w2 window))
+(defmethod window-equal ((w1 window-base) (w2 window-base))
   (= (id w1) (id w2)))
 
-(defmethod raise-window ((window window))
-    (setf (xlib:window-priority (xmaster window)) :top-if))
+(defmethod raise-window ((window toplevel-window))
+  (setf (xlib:window-priority (xmaster window)) :top-if))
 
-(defmethod circulate-window-down ((window window))
+(defmethod circulate-window-down ((window toplevel-window))
   (xlib:circulate-window-down (xmaster window)))
 
-(defmethod circulate-window-up ((window window))
+(defmethod circulate-window-up ((window toplevel-window))
   (xlib:circulate-window-up (xmaster window)))
-
-(defmethod set-input-focus ((focus window) &optional (revert-to :pointer-root))
-  (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to))
-
-(defun send-client-message (window type &rest data)
-  (xlib:send-event (xwindow window) :client-message nil
-		   :window (xwindow window)
-		   :type type
-		   :format 32
-		   :data (mapcar (lambda (x)
-				   (if (keywordp x)
-				       (xlib:intern-atom (xdisplay (display window)) x)
-				       x)) data)))
 
 (defun kill-window (window)
   (let ((display (display window)))
@@ -211,10 +195,10 @@
 	(xlib:kill-client (xdisplay display) (xlib:window-id (xwindow window))))))
 
 (defun kill ()
-  (if (current-window nil)
+  (if (current-window)
       (kill-window (current-window nil))))
 
-(defmethod match-window ((window window) &key instance class name)
+(defmethod match-window ((window toplevel-window) &key instance class name)
   (and
    (if (null class) t (string= (wm-class window) class))
    (if (null name) t (string= (wm-name window) name))
@@ -228,7 +212,7 @@
 (defun group-window (window group)
   (setf (group window) group))
 
-(defmethod maximize-window ((window window))
+(defmethod maximize-window ((window toplevel-window))
   (let* ((screen (screen window))
 	 (max-width (width screen))
 	 (max-height (height screen))
@@ -249,21 +233,21 @@
       (setf (xlib:drawable-width xwindow) (- max-width double-border)
 	    (xlib:drawable-height xwindow) (- max-height double-border title-height)))
     (update-decorate (decorate window))
-    (setf (size-state window) :maximized)
+;    (setf (size-state window) :maximized)
     (flush-display (display window))))
 
-(defun maximized (window)
-  (eql (size-state window) :maximized))
+;; (defun maximized (window)
+;;   (eql (size-state window) :maximized))
 
 (defun maximize ()
-  (if (current-window nil)
-      (maximize-window (current-window nil))))
+  (if (current-window)
+      (maximize-window (current-window))))
 
-(defmethod restore-window ((window window))
-  (let* ((x (orig-x window))
-	 (y (orig-y window))
-	 (width (orig-width window))
-	 (height (orig-height window))
+(defmethod restore-window ((window toplevel-window))
+  (let* ((x (last-x window))
+	 (y (last-y window))
+	 (width (last-width window))
+	 (height (last-height window))
 	 (xmaster (xmaster window))
 	 (xframe (xframe window))
 	 (xwindow (xwindow window))
@@ -281,32 +265,23 @@
       (setf (xlib:drawable-width xwindow) (- width double-border)
 	    (xlib:drawable-height xwindow) (- height double-border title-height)))
     (update-decorate (decorate window))
-    (setf (size-state window) :normal)
     (flush-display (display window))))
 
 (defun restore ()
-  (if (current-window nil)
-      (restore-window (current-window nil))))
+  (if (current-window)
+      (restore-window (current-window))))
 
-(defmethod move-window ((window window) x y)
-  (let ((xmaster (xmaster window)))
-    (xlib:with-state (xmaster)
-      (setf (xlib:drawable-x xmaster) x
-	    (xlib:drawable-y xmaster) y))
-    (setf (orig-x window) x
-	  (orig-y window) y)))
-
-(defmethod moveresize-window ((window window) &key x y width height)
+(defmethod moveresize-window ((window toplevel-window) &key x y width height)
   (let ((xmaster (xmaster window)))
     (xlib:with-state (xmaster)
       (if x (setf (xlib:drawable-x xmaster) x))
       (if y (setf (xlib:drawable-y xmaster) y))
       (if width (setf (xlib:drawable-width xmaster) width))
       (if height (setf (xlib:drawable-height xmaster) height)))
-    (if x (setf (orig-x window) x))
-    (if y (setf (orig-y window) y))
-    (if width (setf (orig-width window) width))
-    (if height (setf (orig-height window) height))
+    (if x (setf (last-x window) x))
+    (if y (setf (last-y window) y))
+    (if width (setf (last-width window) width))
+    (if height (setf (last-height window) height))
     (when (or width height)
       (let ((xframe (xframe window))
 	    (xwindow (xwindow window))
@@ -403,50 +378,34 @@
 						     (- (+ init-x init-width) (x screen))))))
 	(flush-display (display screen)))))))
 
-(defmethod grab-key ((window window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
+(defun send-client-message (window type &rest data)
+  (xlib:send-event (xwindow window) :client-message nil
+		   :window (xwindow window)
+		   :type type
+		   :format 32
+		   :data (mapcar (lambda (x)
+				   (if (keywordp x)
+				       (xlib:intern-atom (xdisplay (display window)) x)
+				       x)) data)))
+
+
+(defmethod grab-key ((window toplevel-window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-key (xmaster window) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
-(defmethod ungrab-key ((window window) keycode &key (modifiers 0))
+(defmethod grab-key ((window root-window) keycode &key modifiers owner-p sync-pointer-p sync-keyboard-p)
+  (xlib:grab-key (xwindow window) keycode :modifiers modifiers :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
+
+(defmethod ungrab-key ((window toplevel-window) keycode &key (modifiers 0))
   (xlib:ungrab-key (xmaster window) keycode :modifiers modifiers))
 
-(defmethod grab-keyboard ((window window) &key owner-p sync-pointer-p sync-keyboard-p)
+(defmethod ungrab-key ((window root-window) keycode &key (modifiers 0))
+  (xlib:ungrab-key (xwindow window) keycode :modifiers modifiers))
+
+(defmethod grab-keyboard ((window toplevel-window) &key owner-p sync-pointer-p sync-keyboard-p)
   (xlib:grab-keyboard (xmaster window) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
-(defun get-wm-state (window)
-  (car (xlib:get-property (xwindow window) :WM_STATE)))
-
-(defun set-wm-state (xwindow state)
-  (xlib:change-property xwindow :WM_STATE (list state) :WM_STATE 32))
-
-(defun set-internal-window-type (xwindow type)
-  (xlib:change-property xwindow :__GOLLUM_INTERNAL (list (case type
-							   (:master 1)
-							   (:title 2)
-							   (:border-nw 3)
-							   (:border-top 4)
-							   (:border-ne 5)
-							   (:border-right 6)
-							   (:border-se 7)
-							   (:border-bottom 8)
-							   (:border-sw 9)
-							   (:border-left 10)
-							   (:frame 11))) :__GOLLUM_INTERNAL 32))
-
-(defun get-internal-window-type (xwindow)
-  (let ((type (car (xlib:get-property xwindow :__GOLLUM_INTERNAL))))
-    (case type
-      (1 :master)
-      (2 :title)
-      (3 :border-nw)
-      (4 :border-top)
-      (5 :border-ne)
-      (6 :border-right)
-      (7 :border-se)
-      (8 :border-bottom)
-      (9 :border-sw)
-      (10 :border-left)
-      (11 :frame)
-      (t nil))))
+(defmethod grab-keyboard ((window root-window) &key owner-p sync-pointer-p sync-keyboard-p)
+  (xlib:grab-keyboard (xwindow window) :owner-p owner-p :sync-pointer-p sync-pointer-p :sync-keyboard-p sync-keyboard-p))
 
 (defun translate-coordinates (src src-x src-y dst)
   (xlib:translate-coordinates (xmaster src) src-x src-y (xmaster dst)))
@@ -454,3 +413,37 @@
 (defvar *default-window-border* "blue")
 
 (defvar *default-window-border-width* 2)
+
+;; icccm
+
+(defmethod wm-name ((window toplevel-window))
+  (xlib:wm-name (xwindow window)))
+
+;; Window managers may examine the property(WM_CLASS) only when they start up and when the window leaves the Withdrawn state, but there should be no need for a client to change its state dynamically.
+
+(defmethod wm-normal-hints ((window toplevel-window))
+  (xlib:wm-normal-hints (xwindow window)))
+
+(defmethod wm-hints ((window toplevel-window))
+  (xlib:wm-hints (xwindow window)))
+
+(defun get-wm-state-1 (xwindow)
+  (let ((state-value (xlib:get-property xwindow :WM_STATE)))
+    (values (case (car state-value)
+	      (0 :withdrawn)
+	      (1 :normal)
+	      (3 :iconic)
+	      (t nil)) (cadr state-value))))
+
+(defmethod get-wm-state ((window toplevel-window))
+  (get-wm-state-1 (xwindow window)))
+
+(defun set-wm-state-1 (xwindow state &optional id)
+  (let ((state-value (case state
+		       (:withdrawn 0)
+		       (:normal 1)
+		       (:iconic 3))))
+    (xlib:change-property xwindow :WM_STATE (if id (list state-value id) (list state-value)) :WM_STATE 32)))
+
+(defmethod set-wm-state ((window toplevel-window) state &optional id)
+  (set-wm-state-1 (xwindow window) state id))
