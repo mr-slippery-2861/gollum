@@ -27,9 +27,6 @@
   ((xmaster :initarg :xmaster		;prepare for reparenting
 	    :accessor xmaster
 	    :initform nil)
-   (xframe :initarg :xframe
-	   :accessor xframe
-	   :initform nil)
    (workspace :initarg :workspace	;a workspace instance
 	      :accessor workspace
 	      :initform nil)
@@ -120,7 +117,8 @@
 
 (defgeneric ungrab-keyboard (display &key time))
 
-(defgeneric print-obj (obj))
+(defmethod print-object ((obj toplevel-window) stream)
+  (format stream "#S(~a ~s #x~x)" (type-of obj) (wm-name obj) (id obj)))
 
 (defmethod x ((window toplevel-window))
   (xlib:drawable-x (xmaster window)))
@@ -185,8 +183,14 @@
 (defmethod circulate-window-down ((window toplevel-window))
   (xlib:circulate-window-down (xmaster window)))
 
+(defmethod circulate-window-down ((window root-window))
+  (xlib:circulate-window-down (xwindow window)))
+
 (defmethod circulate-window-up ((window toplevel-window))
   (xlib:circulate-window-up (xmaster window)))
+
+(defmethod circulate-window-up ((window root-window))
+  (xlib:circulate-window-up (xwindow window)))
 
 (defun kill-window (window)
   (let ((display (display window)))
@@ -217,7 +221,6 @@
 	 (max-width (width screen))
 	 (max-height (height screen))
 	 (xmaster (xmaster window))
-	 (xframe (xframe window))
 	 (xwindow (xwindow window))
 	 (double-border (* 2 *default-window-border-width*))
 	 (title-height (title-height (decorate window))))
@@ -226,9 +229,6 @@
 	    (xlib:drawable-y xmaster) (y screen)
 	    (xlib:drawable-width xmaster) max-width
 	    (xlib:drawable-height xmaster) max-height))
-    (xlib:with-state (xframe)
-      (setf (xlib:drawable-width xframe) (- max-width double-border)
-	    (xlib:drawable-height xframe) (- max-height double-border title-height)))
     (xlib:with-state (xwindow)
       (setf (xlib:drawable-width xwindow) (- max-width double-border)
 	    (xlib:drawable-height xwindow) (- max-height double-border title-height)))
@@ -249,7 +249,6 @@
 	 (width (last-width window))
 	 (height (last-height window))
 	 (xmaster (xmaster window))
-	 (xframe (xframe window))
 	 (xwindow (xwindow window))
 	 (double-border (* 2 *default-window-border-width*))
 	 (title-height (title-height (decorate window))))
@@ -258,9 +257,6 @@
 	    (xlib:drawable-y xmaster) y
 	    (xlib:drawable-width xmaster) width
 	    (xlib:drawable-height xmaster) height))
-    (xlib:with-state (xframe)
-      (setf (xlib:drawable-width xframe) (- width double-border)
-	    (xlib:drawable-height xframe) (- height double-border title-height)))
     (xlib:with-state (xwindow)
       (setf (xlib:drawable-width xwindow) (- width double-border)
 	    (xlib:drawable-height xwindow) (- height double-border title-height)))
@@ -283,13 +279,9 @@
     (if width (setf (last-width window) width))
     (if height (setf (last-height window) height))
     (when (or width height)
-      (let ((xframe (xframe window))
-	    (xwindow (xwindow window))
+      (let ((xwindow (xwindow window))
 	    (double-border (* 2 *default-window-border-width*))
 	    (title-height (title-height (decorate window))))
-	(xlib:with-state (xframe)
-	  (if width (setf (xlib:drawable-width xframe) (- width double-border)))
-	  (if height (setf (xlib:drawable-height xframe) (- height double-border title-height))))
 	(xlib:with-state (xwindow)
 	  (if width (setf (xlib:drawable-width xwindow) (- width double-border)))
 	  (if height (setf (xlib:drawable-height xwindow) (- height double-border title-height))))

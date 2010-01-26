@@ -57,8 +57,8 @@
 	 (font-height (+ (xlib:font-ascent font) (xlib:font-descent font)))
 	 (title-height (+ *decorate-vertical-padding* font-height))
 ;	 (button-size (floor (* 0.618 title-height)))
-	 (w-width (xlib:drawable-width (xframe window)))
-	 (w-height (xlib:drawable-height (xframe window)))
+	 (w-width (xlib:drawable-width (xwindow window)))
+	 (w-height (xlib:drawable-height (xwindow window)))
 	 (title (title decorate)))
     (labels ((update-border (border position)
 	       (let (x y width height)
@@ -111,7 +111,7 @@
 				   :x x :y y :width width :height height
 				   :background (alloc-color *default-window-border* (screen window))
 				   :cursor (getf (cursor-drag-resize (display window)) position)
-				   :event-mask '(:button-press :button-release :owner-grab-button)
+				   :event-mask '(:button-press :button-release :button-motion :owner-grab-button)
 				   :override-redirect :on
 				   :backing-store :always
 				   :save-under :on))))
@@ -119,7 +119,6 @@
 	   (font (output-font screen))
 	   (width (xlib:drawable-width (xwindow window)))
 	   (font-height (+ (xlib:font-ascent font) (xlib:font-descent font)))
-;	   (button-size (floor (* 0.618 font-height)))
 	   (height (+ *decorate-vertical-padding* font-height))
 	   (title (xlib:create-window :parent (xmaster window)
 				      :x *default-window-border-width*
@@ -129,6 +128,7 @@
 				      :background (alloc-color *decorate-background-color* screen)
 				      :event-mask '(:button-press
 						    :button-release
+						    :button-motion
 						    :owner-grab-button
 						    :exposure)
 				      :override-redirect :on

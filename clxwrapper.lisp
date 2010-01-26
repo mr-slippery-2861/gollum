@@ -12,7 +12,7 @@
 							   (:border-bottom 8)
 							   (:border-sw 9)
 							   (:border-left 10)
-							   (:frame 11))) :__GOLLUM_INTERNAL 32))
+							   (:root 11))) :__GOLLUM_INTERNAL 32))
 
 (defun get-internal-window-type (xwindow)
   (let ((type (car (xlib:get-property xwindow :__GOLLUM_INTERNAL))))
@@ -27,7 +27,7 @@
       (8 :border-bottom)
       (9 :border-sw)
       (10 :border-left)
-      (11 :frame)
+      (11 :root)
       (t nil))))
 
 (defun set-xwindow-geometry (xwindow &key x y width height)

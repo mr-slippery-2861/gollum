@@ -60,11 +60,6 @@
 
 ;; Input Focus Events
 
-(defun find-toplevel (window)
-  (if (or (window-equal window (root (screen window))) (toplevel-p window))
-      window
-      (find-toplevel (parent window))))
-
 (define-event-handler :focus-in (window mode kind)
   ;; (unless (find kind '(:pointer :virtual :nonlinear-virtual))
   ;;   (let ((win (xwindow-window window *display*)))
@@ -136,23 +131,26 @@
 						  (:border-sw :sw-resize)
 						  (:border-left :left-resize)))
 	(if (eql type :title)
-	    (xlib:grab-pointer (xmaster win) '(:button-motion :button-release) :cursor (cursor-drag-move *display*))
-	    (xlib:grab-pointer (xmaster win) '(:button-motion :button-release))))))
+	    (xlib:grab-pointer window '(:button-motion :button-release) :cursor (cursor-drag-move *display*))
+	    (xlib:grab-pointer window '(:button-motion :button-release))))))
   t)
 
-(define-event-handler :button-release (time)
+(define-event-handler :button-release (window time)
   (update-event-time time)
-  (reset-drag-moveresize)
-  (xlib:ungrab-pointer (xdisplay *display*))
+  (let ((type (get-internal-window-type window)))
+    (case type
+      ((:title :border-right :border-left :border-top :border-bottom :border-nw :border-ne :border-sw :border-se)
+       (progn
+	 (reset-drag-moveresize)
+	 (xlib:ungrab-pointer (xdisplay *display*))))))
   t)
 
-(define-event-handler :motion-notify (root-x root-y time)
+(define-event-handler :motion-notify (window root-x root-y time)
   (update-event-time time)
-  (drag-moveresize-window root-x root-y)
-  ;; (when (eql (peek-event (xdisplay *display*)) :button-release)
-  ;;   (dformat 1 "drag done")
-  ;;   (set-drag-moveresize-window nil)
-  ;;   (xlib:ungrab-pointer (xdisplay *display*)))
+  (let ((type (get-internal-window-type window)))
+    (case type
+      ((:title :border-right :border-left :border-top :border-bottom :border-nw :border-ne :border-sw :border-se)
+       (drag-moveresize-window root-x root-y))))
   t)
 
 (define-event-handler :enter-notify (window mode kind time)
@@ -193,9 +191,6 @@
 (define-event-handler :configure-notify (window x y width height)
   (when (eql (get-internal-window-type window) :master)
     (dformat 2 "window-type: ~a :configure-notify received, x: ~a y: ~a width: ~a height: ~a" (get-internal-window-type window) x y width height))
-  ;; (when (eql :master (get-internal-window-type window))
-  ;;   (dformat 1 "master configure-notify received")
-  ;;   (update-decorate (decorate (xmaster-window window *display*))))
    t)
 
 (defun probe-xwindow (xwindow)
@@ -205,33 +200,37 @@
     (restart-case (xlib:window-map-state xwindow)
       (not-exist () nil))))
 
+(defun find-screen (xroot)
+  (loop for k being the hash-keys in (screens *display*) using (hash-value screen)
+     when (xlib:window-equal xroot (xwindow (root screen)))
+     return screen))
+
 (define-event-handler :create-notify (window parent override-redirect-p)
-  (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root parent))))
-    (let* ((root (xmaster-window (xlib:drawable-root parent) *display*))
-	   (screen (screen root)))
+  (unless (or override-redirect-p
+	      (eql (xlib:window-class window) :input-only)
+	      (not (xlib:window-equal parent (xlib:drawable-root parent))))
+    (let ((screen (find-screen parent)))
       (if (not (eql (get-internal-window-type window) :master))
 	  (prepare-new-window window parent screen))))
   t)
 
-;; (define-event-handler :create-notify (window parent override-redirect-p)
-;;   (xlib:with-server-grabbed ((xdisplay *display*))
-;;     (if (probe-xwindow window)	;make sure the window is still alive
-;; 	(let* ((p (xwindow-window parent *display*))
-;; 	       (s (screen p)))
-;; 	  (unless (or override-redirect-p (eql (xlib:window-class window) :input-only) (not (xlib:window-equal parent (xlib:drawable-root window)))) ;we ignore override-redirection window and non toplevel window
-;; 	    (manage-new-window window parent s)))
-;; 	(dformat 1 "the window does not suvived")))
-;;   t)
-
+;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
 (define-event-handler :destroy-notify (event-window)
-  (if (probe-xwindow event-window)	;if event-window still exists,it is either xmaster or root
-    (let* ((w (xmaster-window event-window *display*))
-	   (workspace (workspace w)))
-    ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
-      (unless (window-equal w (root (screen w)))
-	(delete-window w *display*)
-	(workspace-set-focus workspace (current-window workspace)))))
-  t)
+  (labels ((process-mapped-window (xmaster)
+	     (let* ((window (xmaster-window xmaster *display*))
+		    (workspace (workspace window)))
+	       (delete-window window *display*)
+	       (workspace-set-focus workspace (current-window workspace))))
+	   (process-withdrawn-window (xroot)
+	     (let* ((screen (find-screen xroot))
+		    (window (loop for k being the hash-keys in (withdrawn-windows screen) using (hash-value window)
+			       when (not (probe-xwindow (xwindow window)))
+			       return window)))
+		(delete-window window *display*))))
+    (let ((type (get-internal-window-type event-window)))
+      (case type
+	(:root (process-withdrawn-window event-window))
+	(:master (process-mapped-window event-window))))))
 
 (define-event-handler :gravity-notify ()
   t)

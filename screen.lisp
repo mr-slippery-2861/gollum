@@ -185,9 +185,9 @@
 
 (defmethod delete-window ((window toplevel-window) (obj screen))
   (let ((id (id window))
-	(ws (workspace window)))
-    (when ws
-      (delete-window window ws))
+	(workspace (workspace window)))
+    (when workspace
+      (delete-window window workspace))
     (remhash id (mapped-windows obj))
     (remhash id (withdrawn-windows obj))
     (setf (stacking-orderd obj) (remove id (stacking-orderd obj) :test #'=))))
@@ -234,7 +234,6 @@
 
 (defun update-screen-window-geometry (window)
   (let* ((xmaster (xmaster window))
-	 (xframe (xframe window))
 	 (xwindow (xwindow window))
 	 (screen (screen window))
 	 (old-x (x window))
@@ -252,9 +251,6 @@
 	    (xlib:drawable-y xmaster) new-y
 	    (xlib:drawable-width xmaster) new-width
 	    (xlib:drawable-height xmaster) new-height))
-    (xlib:with-state (xframe)
-      (setf (xlib:drawable-width xframe) (- new-width double-border)
-	    (xlib:drawable-height xframe) (- new-height double-border title-height)))
     (xlib:with-state (xwindow)
       (setf (xlib:drawable-width xwindow) (- new-width double-border)
 	    (xlib:drawable-height xwindow) (- new-height double-border title-height)))))
@@ -279,12 +275,8 @@
 					:border-width 0 ;use xwindow to implement border so that master can be resized with mouse
 					:event-mask *toplevel-window-event*))
 	   (id (xlib:window-id xwindow))
-	   (xframe (xlib:create-window :parent xmaster
-				       :x 0 :y 0 :width 1 :height 1
-				       :border-width 0))
 	   (window (make-instance 'toplevel-window
 				  :id id
-				  :xframe xframe
 				  :xwindow xwindow
 				  :xmaster xmaster
 				  :protocols (xlib:wm-protocols xwindow)
@@ -293,15 +285,12 @@
 				  :map-state :unmapped)))
       (set-wm-state-1 xwindow :withdrawn)
       (set-internal-window-type xmaster :master)
-      (set-internal-window-type xframe :frame)
-      (xlib:map-window xframe)
       (setf (screen window) screen)	;FIXME: dirty hack
       (add-window window *display*))))
 
 (defun normalize (xwindow)
   (let* ((window (xwindow-window xwindow *display*))
 	 (xmaster (xmaster window))
-	 (xframe (xframe window))
 	 (screen (screen window))
 	 (hints (xlib:wm-hints xwindow))
 	 (normal-hints (xlib:wm-normal-hints xwindow)) ;FIXME: respect the hints
@@ -324,11 +313,9 @@
 	    (xlib:drawable-y xmaster) (- y *default-window-border-width* title-height)
 	    (xlib:drawable-width xmaster) (+ width double-border)
 	    (xlib:drawable-height xmaster) (+ height title-height double-border)))
-    (xlib:with-state (xframe)
-      (setf (xlib:drawable-x xframe) *default-window-border-width*
-	    (xlib:drawable-y xframe) (+ title-height *default-window-border-width*)
-	    (xlib:drawable-width xframe) width
-	    (xlib:drawable-height xframe) height))
+    (xlib:with-state (xwindow)
+      (setf (xlib:drawable-x xwindow) *default-window-border-width*
+	    (xlib:drawable-y xwindow) (+ title-height *default-window-border-width*)))
     (setf (last-x window) (- x *default-window-border-width*)
 	  (last-y window) (- y *default-window-border-width* title-height)
 	  (last-width window) (+ width double-border)
@@ -354,11 +341,10 @@
 (defun unwithdraw (xwindow)
   (let* ((window (xwindow-window xwindow *display*))
 	 (xmaster (xmaster window))
-	 (xframe (xframe window))
 	 (screen (screen window))
 	 (workspace (workspace window))
 	 (hints (xlib:wm-hints xwindow)))
-    (xlib:reparent-window xwindow xframe 0 0)
+    (xlib:reparent-window xwindow xmaster 0 0)
     (xlib:add-to-save-set xwindow)    
     (case (xlib:wm-hints-initial-state hints)
       (:normal (withdrawn->normal xwindow))
@@ -418,6 +404,7 @@
 			      :screen screen
 			      :display (display screen)
 			      :map-state :viewable)))
+    (set-internal-window-type xroot :root)
     (setf (root screen) root
 	  (xlib:window-event-mask (xwindow (root screen))) *root-event*)))
 

@@ -141,7 +141,7 @@
 	(workspace-set-focus workspace (current-window workspace))))))
 
 (defun next-window ()
-  (workspace-next-window (current-workspace nil)))
+  (workspace-next-window (current-workspace)))
 
 (defmethod workspace-prev-window ((workspace workspace))
   (let ((windows (mapped-windows workspace)))
