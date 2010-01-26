@@ -18,7 +18,7 @@
 	       (:file "keysymdef")
 	       (:file "keymap")
 	       (:file "window")
-	       (:file "netwm.lisp")
+	       (:file "netwm")
 	       (:file "decorate")
 	       (:file "clx-decorate")
 	       (:file "focus")
