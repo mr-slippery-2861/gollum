@@ -13,7 +13,7 @@
   :serial t
   :components ((:file "package")
 	       (:file "util")
-	       (:file "clxwrapper.lisp")
+	       (:file "clxwrapper")
 	       (:file "command")
 	       (:file "keysymdef")
 	       (:file "keymap")
