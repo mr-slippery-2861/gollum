@@ -209,9 +209,8 @@
   (unless (or override-redirect-p
 	      (eql (xlib:window-class window) :input-only)
 	      (not (xlib:window-equal parent (xlib:drawable-root parent))))
-    (let ((screen (find-screen parent)))
-      (if (not (eql (get-internal-window-type window) :master))
-	  (prepare-new-window window parent screen))))
+    (if (not (eql (get-internal-window-type window) :master))
+	(prepare-for-new-window window)))
   t)
 
 ;; XLIB:The ordering of the :DESTROY-NOTIFY events is such that for any given window, :DESTROY-NOTIFY is generated on all inferiors of a window before :DESTROY-NOTIFY is generated on the _window_.
@@ -238,11 +237,13 @@
 (define-event-handler :map-notify (window override-redirect-p)
   t)
 
-(define-event-handler :reparent-notify (window parent x y override-redirect-p)
-  ;; (if (and (xlib:window-equal parent (xlib:drawable-root parent)) (eql override-redirect-p :off))
-  ;;     (xlib:with-server-grabbed ((xdisplay *display*))
-  ;; 	(if (probe-xwindow window)
-  ;; 	    (manage-new-window window parent (screen (xwindow-window parent *display*))))))
+(define-event-handler :reparent-notify (window parent override-redirect-p)
+  (unless override-redirect-p
+    (if (eql (get-internal-window-type parent) :root)
+	(prepare-for-new-window window parent)
+	(progn
+	  (remove-window window *display*)
+	  (set-internal-window-type window nil))))
   t)
 
 (define-event-handler :unmap-notify ()
@@ -254,37 +255,37 @@
   t)
 
 (define-event-handler :configure-request (parent window x y width height border-width stack-mode above-sibling value-mask)
-  (unless (xlib:window-equal parent (xlib:drawable-root parent))
-  (let* ((pwin (xwindow-window parent *display*))
-	 (screen (screen pwin)))
-    (multiple-value-bind (root-x root-y dst-child) (translate-coordinates pwin x y (root screen))
-      (declare (ignore dst-child))
-      (let* ((x-p (plusp (logand value-mask 1)))
-	     (y-p (plusp (logand value-mask 2)))
-	     (width-p (plusp (logand value-mask 4)))
-	     (height-p (plusp (logand value-mask 8)))
-	     (double-border (* 2 *default-window-border-width*))
-;	 (border-width-p (plusp (logand value-mask 16)))
-	     (new-x (if x-p (max x (x screen)) (orig-x pwin)))
-	     (new-y (if y-p (max y (y screen)) (orig-y pwin)))
-	     (new-width (if width-p (min width (- (width screen) double-border)) (orig-width pwin)))
-	     (new-height (if height-p (min height (- (height screen) double-border)) (orig-height pwin))))
-;	(stack-mode-p (plusp (logand value-mask 32)))
-;	(above-sibling-p (plusp (logand value-mask 64))))
-	(when (not (maximized pwin))
-	  (xlib:with-state (window)		;FIXME:check the geometric first
-	    (if width-p (setf (xlib:drawable-width window) new-width))
-	    (if height-p (setf (xlib:drawable-height window) new-height)))
-	  (xlib:with-state (parent)
-	    (if x-p (setf (xlib:drawable-x parent) new-x))
-	    (if y-p (setf (xlib:drawable-y parent) new-y))
-	    (if width-p (setf (xlib:drawable-width parent) new-width))
-	    (if height-p (setf (xlib:drawable-height parent) new-height)))
-	  (xlib:display-finish-output display))
-	(setf (orig-x pwin) new-x
-	      (orig-y pwin) new-y
-	      (orig-width pwin) new-width
-	      (orig-height pwin) new-height)))))
+  ;; (unless (xlib:window-equal parent (xlib:drawable-root parent))
+  ;; (let* ((pwin (xwindow-window parent *display*))
+  ;; 	 (screen (screen pwin)))
+  ;;   (multiple-value-bind (root-x root-y dst-child) (translate-coordinates pwin x y (root screen))
+  ;;     (declare (ignore dst-child))
+  ;;     (let* ((x-p (plusp (logand value-mask 1)))
+  ;; 	     (y-p (plusp (logand value-mask 2)))
+  ;; 	     (width-p (plusp (logand value-mask 4)))
+  ;; 	     (height-p (plusp (logand value-mask 8)))
+  ;; 	     (double-border (* 2 *default-window-border-width*))
+  ;; 	     (border-width-p (plusp (logand value-mask 16)))
+  ;; 	     (new-x (if x-p (max x (x screen)) (orig-x pwin)))
+  ;; 	     (new-y (if y-p (max y (y screen)) (orig-y pwin)))
+  ;; 	     (new-width (if width-p (min width (- (width screen) double-border)) (orig-width pwin)))
+  ;; 	     (new-height (if height-p (min height (- (height screen) double-border)) (orig-height pwin)))
+  ;; 	     (stack-mode-p (plusp (logand value-mask 32)))
+  ;; 	     (above-sibling-p (plusp (logand value-mask 64))))
+  ;; 	(when (not (maximized pwin))
+  ;; 	  (xlib:with-state (window)		;FIXME:check the geometric first
+  ;; 	    (if width-p (setf (xlib:drawable-width window) new-width))
+  ;; 	    (if height-p (setf (xlib:drawable-height window) new-height)))
+  ;; 	  (xlib:with-state (parent)
+  ;; 	    (if x-p (setf (xlib:drawable-x parent) new-x))
+  ;; 	    (if y-p (setf (xlib:drawable-y parent) new-y))
+  ;; 	    (if width-p (setf (xlib:drawable-width parent) new-width))
+  ;; 	    (if height-p (setf (xlib:drawable-height parent) new-height)))
+  ;; 	  (xlib:display-finish-output display))
+  ;; 	(setf (orig-x pwin) new-x
+  ;; 	      (orig-y pwin) new-y
+  ;; 	      (orig-width pwin) new-width
+  ;; 	      (orig-height pwin) new-height)))))
   t)
 
 (define-event-handler :map-request (parent window)
@@ -301,20 +302,22 @@
   t)
 
 (define-event-handler :resize-request (window width height)
-  (let* ((win (xwindow-window window *display*))
-	 (screen (screen win))
-	 (actual-width (min (width screen) width))
-	 (actual-height (min (height screen) height)))
-    (xlib:with-state (window)
-      (setf (xlib:drawable-width window) actual-width
-	    (xlib:drawable-height window) actual-height))
-    (setf (orig-width win) actual-width
-	  (orig-height win) actual-height)
-    (xlib:display-finish-output display))
+  ;; (let* ((win (xwindow-window window *display*))
+  ;; 	 (screen (screen win))
+  ;; 	 (actual-width (min (width screen) width))
+  ;; 	 (actual-height (min (height screen) height)))
+  ;;   (xlib:with-state (window)
+  ;;     (setf (xlib:drawable-width window) actual-width
+  ;; 	    (xlib:drawable-height window) actual-height))
+  ;;   (setf (orig-width win) actual-width
+  ;; 	  (orig-height win) actual-height)
+  ;;   (xlib:display-finish-output display))
   t)
 
 (define-event-handler :client-message (window type data)
-  
+  (case type
+    (:WM_CHANGE_STATE (when (= (elt data 0) 3) ;3 is IconicState
+			(normal->iconic window))))
   t)
 
 (defun event-processor (&optional (display *display*))

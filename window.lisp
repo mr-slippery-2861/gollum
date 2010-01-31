@@ -23,6 +23,17 @@
 (defclass root-window (window-base)
   ())
 
+(defclass transient-window (window-base)
+  ((xmaster :initarg :xmaster
+	    :accessor xmaster
+	    :initform nil)
+   (protocols :initarg :protocols
+	      :accessor protocols
+	      :initform nil)
+   (main-window :initarg :main-window
+		:accessor main-window
+		:initform nil)))
+
 (defclass toplevel-window (window-base)
   ((xmaster :initarg :xmaster		;prepare for reparenting
 	    :accessor xmaster
@@ -57,8 +68,11 @@
    (wm-class :initarg :wm-class		;icccm
 	     :accessor wm-class
 	     :initform nil)
-   (protocols :initarg :protocols
+   (protocols :initarg :protocols	;icccm
 	      :accessor protocols
+	      :initform nil)
+   (transient :initarg :transient	;icccm
+	      :accessor transient
 	      :initform nil)
    (group :initarg :group
 	  :accessor group
@@ -143,6 +157,9 @@
 
 (defmethod (setf height) (new-height (window toplevel-window))
   (setf (xlib:drawable-height (xmaster window)) new-height))
+
+(defmethod workspace ((window transient-window))
+  (workspace (main-window window)))
 
 (defmethod mapped ((window toplevel-window))
   (eql (xlib:window-map-state (xmaster window)) :viewable))

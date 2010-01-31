@@ -50,10 +50,11 @@
 	       (x 0))
 	  (dolist (child *mode-line-layout*)
 	    (setf cwidth (floor (/ total-width nchildren))
-		  (gethash child (mode-line-children screen)) (xlib:create-window :parent mode-line
-										  :x x :y 0 :width cwidth :height height
-										  :override-redirect :on
-										  :save-under :on)
+		  (gethash child (mode-line-children screen)) (alloc-xwindow *display*
+									     :parent mode-line
+									     :x x :y 0 :width cwidth :height height
+									     :override-redirect :on
+									     :save-under :on)
 		  total-width (- total-width cwidth)
 		  nchildren (1- nchildren)
 		  x (+ x cwidth))

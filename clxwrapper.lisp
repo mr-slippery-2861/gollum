@@ -1,18 +1,21 @@
 (in-package :gollum)
 
 (defun set-internal-window-type (xwindow type)
-  (xlib:change-property xwindow :__GOLLUM_INTERNAL (list (case type
-							   (:master 1)
-							   (:title 2)
-							   (:border-nw 3)
-							   (:border-top 4)
-							   (:border-ne 5)
-							   (:border-right 6)
-							   (:border-se 7)
-							   (:border-bottom 8)
-							   (:border-sw 9)
-							   (:border-left 10)
-							   (:root 11))) :__GOLLUM_INTERNAL 32))
+  (if type
+      (xlib:change-property xwindow :__GOLLUM_INTERNAL (list (case type
+							       (:master 1)
+							       (:title 2)
+							       (:border-nw 3)
+							       (:border-top 4)
+							       (:border-ne 5)
+							       (:border-right 6)
+							       (:border-se 7)
+							       (:border-bottom 8)
+							       (:border-sw 9)
+							       (:border-left 10)
+							       (:root 11)
+							       (:toplevel 12))) :__GOLLUM_INTERNAL 32)
+      (xlib:delete-property xwindow :__GOLLUM_INTERNAL)))
 
 (defun get-internal-window-type (xwindow)
   (let ((type (car (xlib:get-property xwindow :__GOLLUM_INTERNAL))))
@@ -28,6 +31,7 @@
       (9 :border-sw)
       (10 :border-left)
       (11 :root)
+      (12 :toplevel)
       (t nil))))
 
 (defun set-xwindow-geometry (xwindow &key x y width height)

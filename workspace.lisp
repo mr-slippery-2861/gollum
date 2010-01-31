@@ -75,9 +75,7 @@
   (= (id w1) (id w2)))
 
 (defmethod add-window ((window toplevel-window) (obj workspace))
-  (case (get-wm-state window)
-    (:withdrawn (push window (withdrawn-windows obj)))
-    (:normal (setf (mapped-windows obj) (sort-by-stacking-order (list* window (mapped-windows obj)) (screen obj))))) ;now the mapped-windows are in stacking order
+  (setf (mapped-windows obj) (sort-by-stacking-order (list* window (mapped-windows obj)) (screen obj))) ;now the mapped-windows are in stacking order
   (setf (workspace window) obj)
   (if (workspace-equal obj (current-workspace (screen window)))
 	(map-workspace-window window)
@@ -156,15 +154,6 @@
 
 (defun prev-window ()
   (workspace-prev-window (current-workspace nil)))
-
-(defun unmanage-window (window)
-  (let* ((screen (screen window))
-	 (xmaster (xmaster window))
-	 (xwindow (xwindow window))
-	 (xroot (xwindow (root screen))))
-    (setf (xlib:window-event-mask xmaster) 0)
-    (xlib:reparent-window xwindow xroot (xlib:drawable-x xmaster) (xlib:drawable-y xmaster))
-    (xlib:destroy-window xmaster)))
 
 (defmethod workspace-set-focus ((workspace workspace) window)
   (if (workspace-equal (current-workspace) workspace)

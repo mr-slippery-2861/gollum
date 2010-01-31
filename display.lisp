@@ -54,7 +54,10 @@
 		       :initform nil)
    (font :initarg :font
 	 :accessor font 
-	 :initform nil)))
+	 :initform nil)
+   (xwindow-pool :initarg :xwindow-pool
+		 :accessor xwindow-pool
+		 :initform nil)))
 
 (defgeneric input-focus (display))
 
@@ -81,7 +84,7 @@
 (defmethod input-focus ((display display))
   (let ((input-focus (xlib:input-focus (xdisplay display))))
     (if (xlib:window-p input-focus)
-	(xwindow-window input-focus display)
+	(find-window input-focus)
 	input-focus)))
 
 (defmethod find-keymap (keymap (display display))
@@ -256,20 +259,43 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
   (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (mapped-windows obj))
     (if (and exist-p (xmaster window) (xlib:window-equal xwindow (xmaster window)))
 	window
-	(error 'no-such-window :xwindow xwindow))))
+	nil)))
 
 (defmethod xwindow-window (xwindow (obj display))
-  (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (withdrawn-windows obj))
-    (if (and exist-p (xwindow window) (xlib:window-equal xwindow (xwindow window)))
-	window
-	(error 'no-such-window :xwindow xwindow))))
+  (if (eql (get-wm-state-1 xwindow) :withdrown)
+      nil
+      (multiple-value-bind (window exist-p) (gethash (xlib:window-id xwindow) (withdrawn-windows obj))
+	(if (and exist-p (xwindow window) (xlib:window-equal xwindow (xwindow window)))
+	    window
+	    nil))))
+
+(defun find-window (xwindow &optional (raise-error nil))
+  (let* ((type (get-internal-window-type xwindow))
+	 (window (case type
+		   (:master (xmaster-window xwindow *display*))
+		   (:toplevel (xwindow-window xwindow *display*))
+		   (t nil))))
+     (if (and raise-error (null window))
+	 (error 'no-such-window :xwindow xwindow)
+	 window)))
 
 (defmethod add-window ((window toplevel-window) (obj display))
-  (case (get-wm-state window)
-    (:normal (setf (gethash (id window) (mapped-windows obj)) window))
-    (:withdrawn (setf (gethash (id window) (withdrawn-windows obj)) window)))
+  (setf (gethash (id window) (mapped-windows obj)) window)
   (setf (display window) obj)
-  (add-window window (screen window)))	;FIXME: dirty hack
+  (add-window window (find-screen (xlib:drawable-root (xwindow window)))))
+
+(defmethod add-window ((window transient-window) (obj display))
+  (setf (gethash (id window) (mapped-windows obj)) window)
+  (setf (display window) obj)
+  (add-window window (find-screen (xlib:drawable-root (xwindow window)))))
+
+(defmethod add-window ((window xlib:window) (obj display))
+  (setf (gethash (xlib:window-id window) (withdrawn-windows obj)) window)
+  (add-window window (find-screen (xlib:drawable-root window))))
+
+(defmethod remove-window ((window xlib:window) (obj display))
+  (remove-window window (find-screen (xlib:drawable-root window)))
+  (remhash (xlib:window-id window) (withdrawn-windows obj)))
 
 (defmethod delete-window ((window toplevel-window) (obj display))
   (let ((screen (screen window))
@@ -278,7 +304,34 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
     (delete-window window screen)
     (remhash id (mapped-windows obj))
     (remhash id (withdrawn-windows obj))
-    (xlib:destroy-window (xmaster window))))
+    (free-xwindow (xmaster window) *display*)
+    (destroy-decorate (decorate window))))
+
+(defun alloc-xwindow (display &key parent (x 0) (y 0) (width 1) (height 1) background backing-store border (border-width 0) event-mask override-redirect save-under)
+  (let ((xwindow (car (xwindow-pool display))))
+    (if xwindow
+	(progn
+	  (xlib:reparent-window xwindow parent x y)
+	  (xlib:with-state (xwindow)
+	    (setf (xlib:drawable-width xwindow) width
+		  (xlib:drawable-height xwindow) height)
+	    (if background (setf (xlib:window-background xwindow) background))
+	    (if backing-store (setf (xlib:window-backing-store xwindow) backing-store))
+	    (if border (setf (xlib:window-border xwindow) border))
+	    (if border-width (setf (xlib:drawable-border-width xwindow) border-width))
+	    (if event-mask (setf (xlib:window-event-mask xwindow) event-mask))
+	    (if override-redirect (setf (xlib:window-override-redirect xwindow) override-redirect))
+	    (if save-under (setf (xlib:window-save-under xwindow) save-under))))
+	(setf xwindow (xlib:create-window :parent parent :x x :y y :width width :height height :background background :backing-store backing-store :border border :border-width border-width :event-mask event-mask :override-redirect override-redirect :save-under save-under)))
+    xwindow))
+
+(defun free-xwindow (xwindow display)
+  (if (> (length (xwindow-pool display)) 16) ;FIXME:need to be customizable?
+      (xlib:destroy-window xwindow)
+      (progn
+	(setf (xwindow-pool display) (list* xwindow (xwindow-pool display)))
+	(xlib:unmap-window xwindow)
+	(xlib:reparent-window xwindow (xlib:drawable-root xwindow)))))
 
 (defun flush-display (display)
   (xlib:display-finish-output (xdisplay display)))

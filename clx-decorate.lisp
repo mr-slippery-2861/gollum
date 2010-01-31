@@ -107,33 +107,35 @@
 			      width *default-window-border-width* height (+ w-height offset)))
 		 (:right (setf x (+ w-width *default-window-border-width*) y *default-window-border-width*
 			       width *default-window-border-width* height (+ w-height offset))))
-	       (xlib:create-window :parent (xmaster window)
-				   :x x :y y :width width :height height
-				   :background (alloc-color *default-window-border* (screen window))
-				   :cursor (getf (cursor-drag-resize (display window)) position)
-				   :event-mask '(:button-press :button-release :button-motion :owner-grab-button)
-				   :override-redirect :on
-				   :backing-store :always
-				   :save-under :on))))
+	       (alloc-xwindow *display*
+			      :parent (xmaster window)
+			      :x x :y y :width width :height height
+			      :background (alloc-color *default-window-border* (screen window))
+			      :cursor (getf (cursor-drag-resize (display window)) position)
+			      :event-mask '(:button-press :button-release :button-motion :owner-grab-button)
+			      :override-redirect :on
+			      :backing-store :always
+			      :save-under :on))))
     (let* ((screen (screen window))
 	   (font (output-font screen))
 	   (width (xlib:drawable-width (xwindow window)))
 	   (font-height (+ (xlib:font-ascent font) (xlib:font-descent font)))
 	   (height (+ *decorate-vertical-padding* font-height))
-	   (title (xlib:create-window :parent (xmaster window)
-				      :x *default-window-border-width*
-				      :y *default-window-border-width*
-				      :width width
-				      :height height
-				      :background (alloc-color *decorate-background-color* screen)
-				      :event-mask '(:button-press
-						    :button-release
-						    :button-motion
-						    :owner-grab-button
-						    :exposure)
-				      :override-redirect :on
-				      :backing-store :always
-				      :save-under :on))
+	   (title (alloc-xwindow *display*
+				 :parent (xmaster window)
+				 :x *default-window-border-width*
+				 :y *default-window-border-width*
+				 :width width
+				 :height height
+				 :background (alloc-color *decorate-background-color* screen)
+				 :event-mask '(:button-press
+					       :button-release
+					       :button-motion
+					       :owner-grab-button
+					       :exposure)
+				 :override-redirect :on
+				 :backing-store :always
+				 :save-under :on))
 	   ;; (x-button (xlib:create-window :parent title
 	   ;; 				 :x (- width font-height 5)
 	   ;; 				 :y (floor (/ (- height button-size 2) 2))
@@ -182,6 +184,6 @@
     (output-to-window screen (title decorate) (output-gc screen) :keep (get-window-name (window decorate)))))
 
 (defmethod destroy-decorate ((decorate clx-decorate))
-  (xlib:destroy-subwindows (title decorate))
-  (xlib:destroy-window (title decorate))
-  (mapc #'xlib:destroy-window (list (nw decorate) (top decorate) (ne decorate) (right decorate) (se decorate) (bottom decorate) (sw decorate) (left decorate))))
+  (free-xwindow (title decorate) *display*)
+  (dolist (xwindow (list (nw decorate) (top decorate) (ne decorate) (right decorate) (se decorate) (bottom decorate) (sw decorate) (left decorate)))
+    (free-xwindow xwindow *display*)))
