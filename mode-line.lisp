@@ -69,6 +69,7 @@
 	  (:top (setf (y screen) (+ (y screen) height (* 2 *mode-line-border-width*)))))
 	(xlib:map-window mode-line)
 	(update-mode-line screen)
+	(update-screen-workspace-geometry screen)
 	(update-screen-windows-geometry screen)
 	(schedule-timer (mode-line-timer screen)))))
 
@@ -80,6 +81,7 @@
 	(case *mode-line-gravity*
 	  (:top (setf (y screen) (- (y screen) height (* 2 *mode-line-border-width*)))))
 	(xlib:unmap-window mode-line)
+	(update-screen-workspace-geometry screen)
 	(cancel-timer (mode-line-timer screen)))))
 
 (defun toggle-mode-line (&optional screen)

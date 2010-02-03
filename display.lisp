@@ -245,10 +245,12 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 			       :id id
 			       :xscreen xscreen
 			       :height (xlib:screen-height xscreen)
-			       :width (xlib:screen-width xscreen))))
+			       :width (xlib:screen-width xscreen)))
+	(xroot (xlib:screen-root xscreen)))
     (setf (gethash id (screens display)) screen
 	  (display screen) display)
-    (manage-screen-root screen)))
+    (manage-screen-root screen)
+    (update-screen-workspace-geometry screen)))
 
 (defmethod update-last-event-timestamp ((display display) timestamp)
   (let ((last (last-event-timestamp display)))
@@ -274,18 +276,19 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	 (window (case type
 		   (:master (xmaster-window xwindow *display*))
 		   (:toplevel (xwindow-window xwindow *display*))
-		   (t nil))))
+		   ((:title :border-right :border-left :border-top :border-bottom :border-nw :border-ne :border-sw :border-se) (xmaster-window (find-parent xwindow) *display*))
+		   (t (xwindow-window xwindow *display*)))))
      (if (and raise-error (null window))
 	 (error 'no-such-window :xwindow xwindow)
 	 window)))
 
 (defmethod add-window ((window toplevel-window) (obj display))
-  (setf (gethash (id window) (mapped-windows obj)) window)
+  (setf (gethash (master-id window) (mapped-windows obj)) window)
   (setf (display window) obj)
   (add-window window (find-screen (xlib:drawable-root (xwindow window)))))
 
 (defmethod add-window ((window transient-window) (obj display))
-  (setf (gethash (id window) (mapped-windows obj)) window)
+  (setf (gethash (master-id window) (mapped-windows obj)) window)
   (setf (display window) obj)
   (add-window window (find-screen (xlib:drawable-root (xwindow window)))))
 
@@ -299,7 +302,7 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 
 (defmethod delete-window ((window toplevel-window) (obj display))
   (let ((screen (screen window))
-	(id (id window)))
+	(id (master-id window)))
 ;    (setf (map-state window) :unmapped)
     (delete-window window screen)
     (remhash id (mapped-windows obj))
@@ -307,7 +310,7 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
     (free-xwindow (xmaster window) *display*)
     (destroy-decorate (decorate window))))
 
-(defun alloc-xwindow (display &key parent (x 0) (y 0) (width 1) (height 1) background backing-store border (border-width 0) event-mask override-redirect save-under)
+(defun alloc-xwindow (display &key parent (x 0) (y 0) (width 1) (height 1) background backing-store border (border-width 0) (cursor :none) event-mask override-redirect save-under)
   (let ((xwindow (car (xwindow-pool display))))
     (if xwindow
 	(progn
@@ -319,10 +322,12 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
 	    (if backing-store (setf (xlib:window-backing-store xwindow) backing-store))
 	    (if border (setf (xlib:window-border xwindow) border))
 	    (if border-width (setf (xlib:drawable-border-width xwindow) border-width))
+	    (if cursor (setf (xlib:window-cursor xwindow) cursor))
 	    (if event-mask (setf (xlib:window-event-mask xwindow) event-mask))
 	    (if override-redirect (setf (xlib:window-override-redirect xwindow) override-redirect))
-	    (if save-under (setf (xlib:window-save-under xwindow) save-under))))
-	(setf xwindow (xlib:create-window :parent parent :x x :y y :width width :height height :background background :backing-store backing-store :border border :border-width border-width :event-mask event-mask :override-redirect override-redirect :save-under save-under)))
+	    (if save-under (setf (xlib:window-save-under xwindow) save-under)))
+	  (setf (xwindow-pool display) (cdr (xwindow-pool display))))
+	(setf xwindow (xlib:create-window :parent parent :x x :y y :width width :height height :background background :backing-store backing-store :border border :border-width border-width :cursor cursor :event-mask event-mask :override-redirect override-redirect :save-under save-under)))
     xwindow))
 
 (defun free-xwindow (xwindow display)
@@ -331,7 +336,7 @@ example:(bind-key :top-map \"C-h\" :help-map *display*)"
       (progn
 	(setf (xwindow-pool display) (list* xwindow (xwindow-pool display)))
 	(xlib:unmap-window xwindow)
-	(xlib:reparent-window xwindow (xlib:drawable-root xwindow)))))
+	(xlib:reparent-window xwindow (xlib:drawable-root xwindow) 0 0))))
 
 (defun flush-display (display)
   (xlib:display-finish-output (xdisplay display)))

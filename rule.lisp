@@ -4,17 +4,18 @@
 
 ;; place-rule  (workspace what-if-not-found name-if-create)
 (defmethod apply-place-rule ((window toplevel-window) place-rule)
-  (let* ((s (screen win))
-	 (workspaces (workspaces s))
-	 (ws (find-workspace (first place-rule) workspaces))
+  (let* ((screen (screen window))
+	 (workspaces (workspaces screen))
+	 (workspace (find-workspace (first place-rule) workspaces))
 	 (policy (second place-rule))
 	 (name (or (third place-rule) "default")))
-    (when (null ws)
+    (when (null workspace)
       (case policy
-	(:create (setf ws (add-workspace-to-screen name s)))
-	(:current (setf ws (current-workspace s)))))
-    (add-window win ws)))
+	(:create (setf workspace (add-workspace-to-screen name screen)))
+	(:current (setf workspace (current-workspace screen)))))
+    (add-window window workspace)))
 
+;; FIXME: shall we respect net-wm-desktop?
 (defmethod place-window-according-to-rule ((window toplevel-window) match-rule place-rule)
   (when (apply #'match-window window match-rule)
     (apply-place-rule window place-rule)

@@ -72,3 +72,7 @@ identity with a range check."
               ;; ditto
               else do (setf (aref dst j) (char-code #\?))
               finally (return i)))))
+
+(defun mapcarhash (function hash-table)
+  (loop for k being the hash-keys in hash-table using (hash-value value)
+	collect (funcall function value)))

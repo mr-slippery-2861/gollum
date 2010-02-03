@@ -4,7 +4,7 @@
   ((name :initarg :name
 	 :accessor name
 	 :initform nil)
-   (id :initarg :id
+   (id :initarg :id			;from 0 to (1- number-of-workspaces)
 	   :accessor id
 	   :initform nil)
    (screen :initarg :screen
@@ -52,7 +52,7 @@
 (defgeneric destroy-workspace (workspace))
 
 (defun next-workspace-id (workspaces)
-  (1+ (hash-table-count workspaces)))
+  (hash-table-count workspaces))
 
 (defun find-workspace-by-id (id workspaces)
   (multiple-value-bind (w exist-p) (gethash id workspaces)
@@ -77,6 +77,7 @@
 (defmethod add-window ((window toplevel-window) (obj workspace))
   (setf (mapped-windows obj) (sort-by-stacking-order (list* window (mapped-windows obj)) (screen obj))) ;now the mapped-windows are in stacking order
   (setf (workspace window) obj)
+  (setf (net-wm-desktop window) (id obj))
   (if (workspace-equal obj (current-workspace (screen window)))
 	(map-workspace-window window)
 	(unmap-workspace-window window)))
@@ -86,6 +87,15 @@
   (setf (workspace window) nil)
   (setf (withdrawn-windows obj) (remove window (withdrawn-windows obj) :test #'window-equal))
   (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))) ;remove doesn't break the stacking order
+
+(defun unmanage-window (window)
+  (let* ((screen (screen window))
+	 (xmaster (xmaster window))
+	 (xwindow (xwindow window))
+	 (xroot (xwindow (root screen))))
+    (setf (xlib:window-event-mask xmaster) 0)
+    (xlib:reparent-window xwindow xroot (xlib:drawable-x xmaster) (xlib:drawable-y xmaster))
+    (xlib:destroy-window xmaster)))
 
 (defmethod move-window-to-workspace ((window toplevel-window) (workspace workspace))
   (let ((source (find-workspace-by-id (workspace window) (workspaces (screen window))))
@@ -120,7 +130,7 @@
 (defmethod workspace-raise-window ((workspace workspace) (window toplevel-window))
   (let ((windows (mapped-windows workspace)))
     (when (find window windows :test #'window-equal)
-      (let* ((id (id window))
+      (let* ((id (master-id window))
 	     (screen workspace))
 	(setf (stacking-orderd screen) (append (remove id (stacking-orderd screen) :test #'=) (list id)))
 	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen))
@@ -131,7 +141,7 @@
   (let ((windows (mapped-windows workspace)))
     (when (> (length windows) 1)
       (let* ((current (last windows))
-	     (id (id (car current)))
+	     (id (master-id (car current)))
 	     (screen (screen workspace)))
 	(setf (stacking-orderd screen) (list* id (remove id (stacking-orderd screen) :test #'=)))
 	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen))
@@ -145,7 +155,7 @@
   (let ((windows (mapped-windows workspace)))
     (when (> (length windows) 1)
       (let* ((prev (first windows))
-	     (id (id prev))
+	     (id (master-id prev))
 	     (screen (screen workspace)))
 	(setf (stacking-orderd screen) (append (remove id (stacking-orderd screen) :test #'=) (list id)))
 	(setf (mapped-windows workspace) (sort-by-stacking-order windows screen))

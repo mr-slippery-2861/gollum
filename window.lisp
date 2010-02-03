@@ -1,7 +1,7 @@
 (in-package :gollum)
 
 (defclass window-base ()
-  ((id :initarg :id
+  ((id :initarg :id			;cache of xwindow's id, in case xwindow destroyed
        :accessor id
        :initform nil)
    (xwindow :initarg :xwindow		;a xlib:window instance
@@ -134,10 +134,20 @@
 (defmethod print-object ((obj toplevel-window) stream)
   (format stream "#S(~a ~s #x~x)" (type-of obj) (wm-name obj) (id obj)))
 
+(defun master-id (window)
+  (declare (type (or toplevel-window transient-window) window))
+  (xlib:window-id (xmaster window)))
+
 (defmethod x ((window toplevel-window))
   (xlib:drawable-x (xmaster window)))
 
 (defmethod (setf x) (new-x (window toplevel-window))
+  (setf (xlib:drawable-x (xmaster window)) new-x))
+
+(defmethod x ((window transient-window))
+  (xlib:drawable-x (xmaster window)))
+
+(defmethod (setf x) (new-x (window transient-window))
   (setf (xlib:drawable-x (xmaster window)) new-x))
 
 (defmethod y ((window toplevel-window))
@@ -146,16 +156,34 @@
 (defmethod (setf y) (new-y (window toplevel-window))
   (setf (xlib:drawable-y (xmaster window)) new-y))
 
+(defmethod y ((window transient-window))
+  (xlib:drawable-y (xmaster window)))
+
+(defmethod (setf y) (new-y (window transient-window))
+  (setf (xlib:drawable-y (xmaster window)) new-y))
+
 (defmethod width ((window toplevel-window))
   (xlib:drawable-width (xmaster window)))
 
 (defmethod (setf width) (new-width (window toplevel-window))
   (setf (xlib:drawable-width (xmaster window)) new-width))
 
+(defmethod width ((window transient-window))
+  (xlib:drawable-width (xmaster window)))
+
+(defmethod (setf width) (new-width (window transient-window))
+  (setf (xlib:drawable-width (xmaster window)) new-width))
+
 (defmethod height ((window toplevel-window))
   (xlib:drawable-height (xmaster window)))
 
 (defmethod (setf height) (new-height (window toplevel-window))
+  (setf (xlib:drawable-height (xmaster window)) new-height))
+
+(defmethod height ((window transient-window))
+  (xlib:drawable-height (xmaster window)))
+
+(defmethod (setf height) (new-height (window transient-window))
   (setf (xlib:drawable-height (xmaster window)) new-height))
 
 (defmethod workspace ((window transient-window))
@@ -171,7 +199,7 @@
   (member (get-wm-state window) '(:normal :iconic)))
 
 (defmethod get-window-name ((window toplevel-window))
-  (let ((netwm-name (get-net-wm-name window)))
+  (let ((netwm-name (net-wm-name window)))
     (if netwm-name
 	netwm-name
 	(wm-name window))))
@@ -213,7 +241,7 @@
   (let ((display (display window)))
     (if (find :wm_delete_window (protocols window))
 	(send-client-message window :wm_protocols :wm_delete_window)
-	(xlib:kill-client (xdisplay display) (xlib:window-id (xwindow window))))))
+	(xlib:kill-client (xdisplay display) (id window)))))
 
 (defun kill ()
   (if (current-window)
@@ -425,8 +453,27 @@
 
 ;; icccm
 
-(defmethod wm-name ((window toplevel-window))
+(defun wm-name (window)
+  (declare (type (or toplevel-window transient-window) window))
   (xlib:wm-name (xwindow window)))
+
+;; netwm
+
+(defun net-wm-name (window)
+  (declare (type (or toplevel-window transient-window) window))
+  (get-net-wm-name (xwindow window)))
+
+(defun net-wm-icon-name (window)
+  (declare (type (or toplevel-window transient-window) window))
+  (get-net-wm-icon-name (xwindow window)))
+
+(defun net-wm-desktop (window)
+  (declare (type (or toplevel-window transient-window) window))
+  (get-net-wm-desktop (xwindow window)))
+
+(defun (setf net-wm-desktop) (id window)
+  (declare (type (or toplevel-window transient-window) window))
+  (set-net-wm-desktop (xwindow window) id))
 
 ;; Window managers may examine the property(WM_CLASS) only when they start up and when the window leaves the Withdrawn state, but there should be no need for a client to change its state dynamically.
 
