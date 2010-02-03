@@ -214,7 +214,7 @@
   (labels ((process-mapped-window (xmaster)
 	     (let* ((window (find-window xmaster t))
 		    (workspace (workspace window)))
-	       (remove-from-net-client-list (xlib:drawable-root (xwindow window)) (id window))
+	       (remove-from-net-client-list (xlib:drawable-root (xmaster window)) (id window))
 	       (delete-window window *display*)
 	       (workspace-set-focus workspace (current-window workspace))))
 	   (process-withdrawn-window (xroot)
@@ -255,40 +255,44 @@
 
 (define-event-handler :configure-request (parent window x y width height border-width stack-mode above-sibling value-mask)
   (dformat 2 "configure-request ~x ~a ~a ~a ~a ~a" (xlib:window-id window) x y width height value-mask)
-  (case (get-internal-window-type parent)
-    (:master (let* ((win (find-window parent))
-		    (title-height (title-height (decorate win)))
-		    (double-border (* 2 *default-window-border-width*))
-		    (x-p (plusp (logand value-mask 1)))
-		    (y-p (plusp (logand value-mask 2)))
-		    (width-p (plusp (logand value-mask 4)))
-		    (height-p (plusp (logand value-mask 8)))
-		    (border-width-p (plusp (logand value-mask 16)))
-		    (stack-mode-p (plusp (logand value-mask 32)))
-		    (above-sibling-p (plusp (logand value-mask 64)))
-		    (current-width (width win))
-		    (current-height (height win)))
-	       (multiple-value-bind (new-x new-y new-width new-height) (calculate-window-geometry (screen win) (- x *default-window-border-width*) (- y *default-window-border-width* title-height) (+ width double-border) (+ height double-border title-height))
-		 (moveresize-window win
-				    :x (and x-p new-x) :y (and y-p new-y)
-				    :width (and (not (= current-width new-width)) new-width)
-				    :height (and (not (= current-height new-height)) new-height))
-		 (when (and (= current-width new-width) (= current-height new-height))
-		   (multiple-value-bind (root-x root-y) (xlib:translate-coordinates window
-										    (xlib:drawable-x window)
-										    (xlib:drawable-y window)
-										    (xlib:drawable-root window))
-		     (xlib:send-event window :configure-notify nil :event-window window :window window
-				      :x root-x :y root-y
-				      :width (xlib:drawable-width window)
-				      :height (xlib:drawable-height window)
-				      :border-width 0
-				      :propagate-p nil))))))
-    (:root (xlib:with-state (window)
-	     (setf (xlib:drawable-x window) x
-		   (xlib:drawable-y window) y
-		   (xlib:drawable-width window) width
-		   (xlib:drawable-height window) height))))
+  (let ((x-p (plusp (logand value-mask 1)))
+	(y-p (plusp (logand value-mask 2)))
+	(width-p (plusp (logand value-mask 4)))
+	(height-p (plusp (logand value-mask 8)))
+	(border-width-p (plusp (logand value-mask 16)))
+	(stack-mode-p (plusp (logand value-mask 32)))
+	(above-sibling-p (plusp (logand value-mask 64))))
+    (case (get-internal-window-type parent)
+      (:master (let* ((win (find-window parent))
+		      (title-height (title-height (decorate win)))
+		      (double-border (* 2 *default-window-border-width*))
+		      (current-width (width win))
+		      (current-height (height win)))
+		 (multiple-value-bind (new-x new-y new-width new-height)
+		     (fix-window-geometry (screen win)
+					  (- x *default-window-border-width*)
+					  (- y *default-window-border-width* title-height)
+					  (+ width double-border) (+ height double-border title-height))
+		   (moveresize-window win
+				      :x (and x-p new-x) :y (and y-p new-y)
+				      :width (and (not (= current-width new-width)) new-width)
+				      :height (and (not (= current-height new-height)) new-height))
+		   (when (and (= current-width new-width) (= current-height new-height))
+		     (multiple-value-bind (root-x root-y) (xlib:translate-coordinates window
+										      (xlib:drawable-x window)
+										      (xlib:drawable-y window)
+										      (xlib:drawable-root window))
+		       (xlib:send-event window :configure-notify nil :event-window window :window window
+					:x root-x :y root-y
+					:width (xlib:drawable-width window)
+					:height (xlib:drawable-height window)
+					:border-width 0
+					:propagate-p nil))))))
+      (:root (xlib:with-state (window)
+	     (if x-p (setf (xlib:drawable-x window) x))
+	     (if y-p (setf (xlib:drawable-y window) y))
+	     (if width-p (setf (xlib:drawable-width window) width))
+	     (if height-p (setf (xlib:drawable-height window) height))))))
   t)
 
 (define-event-handler :map-request (parent window)

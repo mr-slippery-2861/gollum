@@ -19,6 +19,9 @@
 (defmethod set-input-focus ((focus toplevel-window) &optional (revert-to :pointer-root))
   (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to))
 
+(defmethod set-input-focus ((focus transient-window) &optional (revert-to :pointer-root))
+  (xlib:set-input-focus (xdisplay (display focus)) (xwindow focus) revert-to))
+
 (defun set-focus (window)
   (if window
       (let ((root (root (screen window))))

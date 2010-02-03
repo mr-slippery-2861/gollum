@@ -186,7 +186,10 @@
 (defmethod add-window ((window transient-window) (obj screen))
   (setf (gethash (master-id window) (mapped-windows obj)) window)
   (setf (screen window) obj)
-  (setf (stacking-orderd obj) (append (stacking-orderd obj) (list (master-id window)))))
+  (setf (stacking-orderd obj) (append (stacking-orderd obj) (list (master-id window))))
+  (case (type-of (main-window window))
+    (root-window (add-window window (window-workspace-according-to-rule window)))
+    (toplevel-window (add-window window (workspace (main-window window))))))
 
 (defmethod add-window ((window xlib:window) (obj screen))
   (setf (gethash (xlib:window-id window) (withdrawn-windows obj)) window))
@@ -194,13 +197,32 @@
 (defmethod remove-window ((window xlib:window) (obj screen))
   (remhash (xlib:window-id window) (withdrawn-windows obj)))
 
+(defmethod remove-window ((window toplevel-window) (obj screen))
+  (remove-window window (workspace window))
+  (remhash (master-id window) (mapped-windows obj))
+  (setf (screen window) nil)
+  (setf (stacking-orderd obj) (remove (master-id window) (stacking-orderd obj))))
+
+(defmethod remove-window ((window transient-window) (obj screen))
+  (remove-window window (workspace window))
+  (remhash (master-id window) (mapped-windows obj))
+  (setf (screen window) nil)
+  (setf (stacking-orderd obj) (remove (master-id window) (stacking-orderd obj))))
+
 (defmethod delete-window ((window toplevel-window) (obj screen))
   (let ((id (master-id window))
 	(workspace (workspace window)))
     (when workspace
       (delete-window window workspace))
     (remhash id (mapped-windows obj))
-    (remhash id (withdrawn-windows obj))
+    (setf (stacking-orderd obj) (remove id (stacking-orderd obj) :test #'=))))
+
+(defmethod delete-window ((window transient-window) (obj screen))
+  (let ((id (master-id window))
+	(workspace (workspace window)))
+    (when workspace
+      (delete-window window workspace))
+    (remhash id (mapped-windows obj))
     (setf (stacking-orderd obj) (remove id (stacking-orderd obj) :test #'=))))
 
 (defmethod find-matching-windows ((obj screen) &key instance class name)
@@ -247,7 +269,7 @@
       (min num1 num2)
       (or num1 num2)))
 
-(defun calculate-window-geometry (screen x y width height)
+(defun fix-window-geometry (screen x y width height)
   (let ((new-x (max x (x screen)))
 	(new-y (max y (y screen)))
 	(new-width (min width (width screen)))
@@ -264,7 +286,7 @@
 	 (old-height (height window))
 	 (double-border (* 2 *default-window-border-width*))
 	 (title-height (title-height (decorate window))))
-    (multiple-value-bind (new-x new-y new-width new-height) (calculate-window-geometry screen old-x old-y old-width old-height)
+    (multiple-value-bind (new-x new-y new-width new-height) (fix-window-geometry screen old-x old-y old-width old-height)
       (xlib:with-state (xmaster)
 	(setf (xlib:drawable-x xmaster) new-x
 	      (xlib:drawable-y xmaster) new-y
@@ -286,7 +308,7 @@
 	 (old-y (y window))
 	 (old-width (width window))
 	 (old-height (height window)))
-    (multiple-value-bind (new-x new-y new-width new-height) (calculate-window-geometry screen old-x old-y old-width old-height)
+    (multiple-value-bind (new-x new-y new-width new-height) (fix-window-geometry screen old-x old-y old-width old-height)
       (xlib:with-state (xmaster)
 	(setf (xlib:drawable-x xmaster) new-x
 	      (xlib:drawable-y xmaster) new-y
@@ -370,61 +392,63 @@
 	      (send-client-message window :WM_PROTOCOLS :WM_TAKE_FOCUS (get-event-time)))))))
 
 (defun normalize-transient-window (xwindow transient-for)
-  (let* ((main-window (find-window transient-for))
-	 (state (get-wm-state (xwindow main-window))))
-    (if (eql state :normal)
-	(let* ((xroot (xlib:drawable-root xwindow))
-	       (screen (find-screen xroot))
-	       (x (xlib:drawable-x xwindow))
-	       (y (xlib:drawable-y xwindow))
-	       (width (xlib:drawable-width xwindow))
-	       (height (xlib:drawable-height xwindow))
-	       (double-border (* 2 *default-window-border-width*))
-	       (xmaster (alloc-xwindow *display*
-				       :parent xroot
-				       :x (- x *default-window-border-width*)
-				       :y (- y *default-window-border-width*)
-				       :width (+ width double-border)
-				       :height (+ height double-border)
-				       :event-mask *toplevel-window-event*
-				       :override-redirect :on))
-	       (window (make-instance 'transient-window
-				      :id (xlib:window-id xwindow)
-				      :main-window main-window
-				      :xwindow xwindow
-				      :xmaster xmaster
-				      :protocols (xlib:wm-protocols xwindow)
-				      :map-state :mapped))
-	       (hints (xlib:wm-hints xwindow)))
-	  (xlib:with-state (xmaster)
-	    (setf (xlib:drawable-border-width xmaster) *default-window-border-width*
-		  (xlib:window-border xmaster) (alloc-color *default-window-border* (screen window))
-		  (xlib:drawable-x xmaster) (- x *default-window-border-width*)
-		  (xlib:drawable-y xmaster) (- y *default-window-border-width*)
-		  (xlib:drawable-width xmaster) width
-		  (xlib:drawable-height xmaster) height))
-					;	    (setf (xlib:window-priority (xmaster window)) (xmaster main-window) :above))
-	  (xlib:reparent-window xwindow xmaster 0 0)
-	  (xlib:add-to-save-set xwindow)
-	  (setf (xlib:drawable-border-width xwindow) 0)
-	  (setf (transient main-window) (list* window (transient main-window)))
-	  (remove-window xwindow *display*)
-	  (add-window window *display*)
-	  (set-wm-state window :normal)
-	  (if (workspace-equal (workspace window) (current-workspace screen))
-	      (map-workspace-window window))
-	  (if (eql (xlib:wm-hints-input hints) :on) ;icccm
-	      (workspace-set-focus (workspace window) window)
-	      (if (find :WM_TAKE_FOCUS (protocols window))
-		  (send-client-message window :WM_PROTOCOLS :WM_TAKE_FOCUS (get-event-time))))))))
+  (multiple-value-bind (wm-instance wm-class) (xlib:get-wm-class xwindow)
+    (let* ((main-window (find-window transient-for))
+	   (state (get-wm-state-1 xwindow)))
+      (if (eql state :normal)
+	  (let* ((xroot (xlib:drawable-root xwindow))
+		 (screen (find-screen xroot))
+		 (width (xlib:drawable-width xwindow))
+		 (height (xlib:drawable-height xwindow))
+		 (xmaster (alloc-xwindow *display*
+					 :parent xroot
+					 :width width
+					 :height height
+					 :event-mask *toplevel-window-event*
+					 :override-redirect :on))
+		 (window (make-instance 'transient-window
+					:id (xlib:window-id xwindow)
+					:main-window main-window
+					:xwindow xwindow
+					:xmaster xmaster
+					:wm-instance wm-instance
+					:wm-class wm-class
+					:protocols (xlib:wm-protocols xwindow)
+					:map-state :mapped))
+		 (hints (xlib:wm-hints xwindow)))
+	    (set-internal-window-type xmaster :master)
+	    (multiple-value-bind (real-x real-y real-width real-height) (calculate-window-geometry window)
+	      (xlib:with-state (xmaster)
+		(setf (xlib:drawable-border-width xmaster) *default-window-border-width*
+		      (xlib:window-border xmaster) (alloc-color *default-window-border* screen)
+		      (xlib:drawable-x xmaster) real-x
+		      (xlib:drawable-y xmaster) real-y
+		      (xlib:drawable-width xmaster) real-width
+		      (xlib:drawable-height xmaster) real-height))
+	      ;; (setf (xlib:window-priority (xmaster window)) (xmaster main-window) :above)) 
+	      (xlib:reparent-window xwindow xmaster 0 0)
+	      (xlib:add-to-save-set xwindow)
+	      (setf (xlib:drawable-border-width xwindow) 0)
+	      (setf (transient main-window) (list* window (transient main-window)))
+	      (remove-window xwindow *display*)
+	      (add-window window *display*)
+	      (set-wm-state window :normal)
+	      (if (workspace-equal (workspace window) (current-workspace screen))
+		  (map-workspace-window window))
+	      (if (eql (xlib:wm-hints-input hints) :on) ;icccm
+		  (workspace-set-focus (workspace window) window)
+		  (if (find :WM_TAKE_FOCUS (protocols window))
+		      (send-client-message window :WM_PROTOCOLS :WM_TAKE_FOCUS (get-event-time))))))))))
 
 (defun normalize (xwindow)
-  (let ((transient-for (xlib:get-property xwindow :WM_TRANSIENT_FOR)))
-    (if transient-for
-	(normalize-transient-window (xwindow transient-for))
+  (let ((transient-for (xlib:get-property xwindow :WM_TRANSIENT_FOR))
+	(netwm-window-type (get-net-wm-window-type xwindow)))
+    (if (or transient-for (eql :_NET_WM_WINDOW_TYPE_DIALOG (car netwm-window-type)))
+	(normalize-transient-window xwindow (or transient-for (xlib:drawable-root xwindow)))
 	(normalize-toplevel-window xwindow))))
 
 (defun withdrawn->normal (xwindow)
+  (set-wm-state-1 xwindow :normal)
   (normalize xwindow))
 
 (defun withdrawn->iconic (xwindow)
@@ -637,7 +661,7 @@
 (defmethod init-screen ((screen screen))
   (set-screen-wm-check screen)
   (add-workspaces-according-to-layout screen)
-  (set-current-workspace (find-workspace-by-id 1 (workspaces screen)) screen)
+  (set-current-workspace (find-workspace-by-id 0 (workspaces screen)) screen)
   (update-screen-current-workspace screen)
   (setf (output-font screen) (open-font (display screen) *output-font*)
 	(mode-line screen) (make-internal-window screen)

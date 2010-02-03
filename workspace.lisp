@@ -20,6 +20,9 @@
 		  :accessor current-focus
 		  :initform nil)))
 
+(defmethod print-object ((object workspace) stream)
+  (format stream "#<~a ~s>" (type-of object) (name object)))
+
 (defgeneric add-window (win obj))
 
 (defgeneric delete-window (win obj)
@@ -79,14 +82,36 @@
   (setf (workspace window) obj)
   (setf (net-wm-desktop window) (id obj))
   (if (workspace-equal obj (current-workspace (screen window)))
-	(map-workspace-window window)
-	(unmap-workspace-window window)))
+      (map-workspace-window window)
+      (unmap-workspace-window window)))
+
+(defmethod add-window ((window transient-window) (obj workspace))
+  (setf (mapped-windows obj) (sort-by-stacking-order (list* window (mapped-windows obj)) (screen window)))
+  (setf (workspace window) obj)
+  (setf (net-wm-desktop window) (id obj))
+  (if (workspace-equal obj (current-workspace (screen window)))
+      (map-workspace-window window)
+      (unmap-workspace-window window)))
+
+(defmethod remove-window ((window toplevel-window) (obj workspace))
+  (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))
+  (setf (workspace window) nil)
+  (setf (net-wm-desktop window) nil))
+
+(defmethod remove-window ((window transient-window) (obj workspace))
+  (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))
+  (setf (workspace window) nil)
+  (setf (net-wm-desktop window) nil))
 
 (defmethod delete-window ((window toplevel-window) (obj workspace))
   (unmap-workspace-window window)
   (setf (workspace window) nil)
-  (setf (withdrawn-windows obj) (remove window (withdrawn-windows obj) :test #'window-equal))
   (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal))) ;remove doesn't break the stacking order
+
+(defmethod delete-window ((window transient-window) (obj workspace))
+  (unmap-workspace-window window)
+  (setf (workspace window) nil)
+  (setf (mapped-windows obj) (remove window (mapped-windows obj) :test #'window-equal)))
 
 (defun unmanage-window (window)
   (let* ((screen (screen window))

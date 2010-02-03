@@ -80,4 +80,7 @@
       (xlib:delete-property xwindow :_NET_WM_DESKTOP)))
 
 (defun get-net-wm-window-type (xwindow)
-  (xlib:get-property xwindow :_NET_WM_WINDOW_TYPE))
+  (let ((atoms (xlib:get-property xwindow :_NET_WM_WINDOW_TYPE)))
+    (and atoms (mapcar (lambda (atom)
+			 (xlib:atom-name (xlib:window-display xwindow) atom)) atoms))))
+

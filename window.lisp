@@ -21,12 +21,23 @@
 	      :initform :unmapped)))
 
 (defclass root-window (window-base)
-  ())
+  ((transient :initarg :transient
+	      :accessor transient
+	      :initform nil)))
 
 (defclass transient-window (window-base)
   ((xmaster :initarg :xmaster
 	    :accessor xmaster
 	    :initform nil)
+   (workspace :initarg :workspace	;a workspace instance
+	      :accessor workspace
+	      :initform nil)
+   (wm-instance :initarg :wm-instance	;icccm
+		:accessor wm-instance
+		:initform nil)
+   (wm-class :initarg :wm-class		;icccm
+	     :accessor wm-class
+	     :initform nil)
    (protocols :initarg :protocols
 	      :accessor protocols
 	      :initform nil)
@@ -132,11 +143,17 @@
 (defgeneric ungrab-keyboard (display &key time))
 
 (defmethod print-object ((obj toplevel-window) stream)
-  (format stream "#S(~a ~s #x~x)" (type-of obj) (wm-name obj) (id obj)))
+  (format stream "#<~a ~s #x~x>" (type-of obj) (wm-name obj) (id obj)))
+
+(defmethod print-object ((obj transient-window) stream)
+  (format stream "#<~a ~s #x~x>" (type-of obj) (wm-name obj) (id obj)))
 
 (defun master-id (window)
   (declare (type (or toplevel-window transient-window) window))
   (xlib:window-id (xmaster window)))
+
+(defmethod x ((window root-window))
+  (xlib:drawable-x (xwindow window)))
 
 (defmethod x ((window toplevel-window))
   (xlib:drawable-x (xmaster window)))
@@ -150,6 +167,9 @@
 (defmethod (setf x) (new-x (window transient-window))
   (setf (xlib:drawable-x (xmaster window)) new-x))
 
+(defmethod y ((window root-window))
+  (xlib:drawable-y (xwindow window)))
+
 (defmethod y ((window toplevel-window))
   (xlib:drawable-y (xmaster window)))
 
@@ -161,6 +181,9 @@
 
 (defmethod (setf y) (new-y (window transient-window))
   (setf (xlib:drawable-y (xmaster window)) new-y))
+
+(defmethod width ((window root-window))
+  (xlib:drawable-width (xwindow window)))
 
 (defmethod width ((window toplevel-window))
   (xlib:drawable-width (xmaster window)))
@@ -174,6 +197,9 @@
 (defmethod (setf width) (new-width (window transient-window))
   (setf (xlib:drawable-width (xmaster window)) new-width))
 
+(defmethod height ((window root-window))
+  (xlib:drawable-height (xwindow window)))
+
 (defmethod height ((window toplevel-window))
   (xlib:drawable-height (xmaster window)))
 
@@ -186,17 +212,23 @@
 (defmethod (setf height) (new-height (window transient-window))
   (setf (xlib:drawable-height (xmaster window)) new-height))
 
-(defmethod workspace ((window transient-window))
-  (workspace (main-window window)))
-
 (defmethod mapped ((window toplevel-window))
+  (eql (xlib:window-map-state (xmaster window)) :viewable))
+
+(defmethod mapped ((window transient-window))
   (eql (xlib:window-map-state (xmaster window)) :viewable))
 
 (defmethod not-mapped ((window toplevel-window))
   (eql (xlib:window-map-state (xmaster window)) :unmapped))
 
+(defmethod not-mapped ((window transient-window))
+  (eql (xlib:window-map-state (xmaster window)) :unmapped))
+
 (defmethod should-be-mapped ((window toplevel-window))
-  (member (get-wm-state window) '(:normal :iconic)))
+  (eql (get-wm-state window) :normal))
+
+(defmethod should-be-mapped ((window transient-window))
+  (eql (get-wm-state window) :normal))
 
 (defmethod get-window-name ((window toplevel-window))
   (let ((netwm-name (net-wm-name window)))
@@ -208,7 +240,15 @@
   (when (not-mapped window)
     (xlib:map-window (xmaster window))))
 
+(defmethod map-window ((window transient-window))
+  (when (not-mapped window)
+    (xlib:map-window (xmaster window))))
+
 (defmethod map-workspace-window ((window toplevel-window))
+  (when (should-be-mapped window)
+    (map-window window)))
+
+(defmethod map-workspace-window ((window transient-window))
   (when (should-be-mapped window)
     (map-window window)))
 
@@ -216,7 +256,14 @@
   (when (mapped window)
     (xlib:unmap-window (xmaster window))))
 
+(defmethod unmap-window ((window transient-window))
+  (when (mapped window)
+    (xlib:unmap-window (xmaster window))))
+
 (defmethod unmap-workspace-window ((window toplevel-window))
+  (unmap-window window))
+
+(defmethod unmap-workspace-window ((window transient-window))
   (unmap-window window))
 
 (defmethod window-equal ((w1 window-base) (w2 window-base))
@@ -248,6 +295,12 @@
       (kill-window (current-window nil))))
 
 (defmethod match-window ((window toplevel-window) &key instance class name)
+  (and
+   (if (null class) t (string= (wm-class window) class))
+   (if (null name) t (string= (wm-name window) name))
+   (if (null instance) t (string= (wm-instance window) instance))))
+
+(defmethod match-window ((window transient-window) &key instance class name)
   (and
    (if (null class) t (string= (wm-class window) class))
    (if (null name) t (string= (wm-name window) name))
@@ -287,6 +340,20 @@
 (defun maximize ()
   (if (current-window)
       (maximize-window (current-window))))
+
+(defmethod calculate-window-geometry ((window toplevel-window))
+  (values (x window) (y window) (width window) (height window)))
+
+(defmethod calculate-window-geometry ((window transient-window))
+  (let* ((main-window (main-window window))
+	 (main-x (x main-window))
+	 (main-y (y main-window))
+	 (main-width (width main-window))
+	 (main-height (height main-window))
+	 (width (width window))
+	 (height (height window)))
+    (values (+ main-x (floor (/ (- main-width width) 2))) (+ main-y (floor (/ (- main-height height) 2)))
+	    width height)))
 
 (defmethod restore-window ((window toplevel-window))
   (let* ((x (last-x window))
@@ -331,6 +398,19 @@
 	  (if width (setf (xlib:drawable-width xwindow) (- width double-border)))
 	  (if height (setf (xlib:drawable-height xwindow) (- height double-border title-height))))
 	(update-decorate (decorate window))))))
+
+(defmethod moveresize-window ((window transient-window) &key x y width height)
+  (let ((xmaster (xmaster window)))
+    (xlib:with-state (xmaster)
+      (if x (setf (xlib:drawable-x xmaster) x))
+      (if y (setf (xlib:drawable-y xmaster) y))
+      (if width (setf (xlib:drawable-width xmaster) width))
+      (if height (setf (xlib:drawable-height xmaster) height)))
+    (when (or width height)
+      (let ((xwindow (xwindow window)))
+	(xlib:with-state (xwindow)
+	  (if width (setf (xlib:drawable-width xwindow) width))
+	  (if height (setf (xlib:drawable-height xwindow) height)))))))
 
 (let ((target-window nil)
       (p-x nil)
@@ -491,8 +571,14 @@
 	      (3 :iconic)
 	      (t nil)) (cadr state-value))))
 
-(defmethod get-wm-state ((window toplevel-window))
+(defmethod get-wm-state ((window window-base))
   (get-wm-state-1 (xwindow window)))
+
+(defmethod get-wm-state ((window toplevel-window))
+  (call-next-method))
+
+(defmethod get-wm-state ((window transient-window))
+  (call-next-method))
 
 (defun set-wm-state-1 (xwindow state &optional id)
   (let ((state-value (case state
@@ -501,5 +587,11 @@
 		       (:iconic 3))))
     (xlib:change-property xwindow :WM_STATE (if id (list state-value id) (list state-value)) :WM_STATE 32)))
 
-(defmethod set-wm-state ((window toplevel-window) state &optional id)
+(defmethod set-wm-state ((window window-base) state &optional id)
   (set-wm-state-1 (xwindow window) state id))
+
+(defmethod set-wm-state ((window toplevel-window) state &optional id)
+  (call-next-method window state id))
+
+(defmethod set-wm-state ((window transient-window) state &optional id)
+  (call-next-method window state id))
